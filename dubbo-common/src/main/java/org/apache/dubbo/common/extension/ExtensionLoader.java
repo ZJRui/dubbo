@@ -91,12 +91,28 @@ import static org.apache.dubbo.common.constants.CommonConstants.REMOVE_VALUE_PRE
  * <li>default extension is an adaptive instance</li>
  * </ul>
  *
+ * ApplicationModel、DubboBootstrap 和这个类目前被设计为单例或静态（本身完全静态或使用一些静态字段）。 因此从它们返回的实例属于进程或类加载器范围。 如果要在单个进程中支持多个 dubbo 服务器，可能需要重构这三个类。
+ * 加载 dubbo 扩展
+ * 自动注入依赖扩展
+ * 包装器中的自动包装扩展
+ * 默认扩展是一个自适应实例
+ *
  * @see <a href="http://java.sun.com/j2se/1.5.0/docs/guide/jar/jar.html#Service%20Provider">Service Provider in Java 5</a>
  * @see org.apache.dubbo.common.extension.SPI
  * @see org.apache.dubbo.common.extension.Adaptive
  * @see org.apache.dubbo.common.extension.Activate
  */
 public class ExtensionLoader<T> {
+    /**
+     * Protocol protocol=ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension()
+     * 这里的ExtensionLoader类似JDK标准SPI中的ServiceLoader
+     *
+     * 每个扩展接口对应着字节的ExtensionLoader对昂， ExtensionLoader对象覅昂的type属性就是扩展接口。
+     *
+     * 在DubboBootstrap类的静态newInstance方法中会 创建ExtensionDirector对象，这个ExtensionDirector 对象中
+     * 会缓存扩展接口与对应的ExtensionLoader的映射。
+     *
+     */
 
     private static final Logger logger = LoggerFactory.getLogger(ExtensionLoader.class);
 
@@ -520,6 +536,9 @@ public class ExtensionLoader<T> {
      */
     @SuppressWarnings("unchecked")
     public T getExtension(String name) {
+        /**
+         * 返回使用Wrapper增强后的扩展点
+         */
         T extension = getExtension(name, true);
         if (extension == null) {
             throw new IllegalArgumentException("Not find extension: " + name);
@@ -697,6 +716,10 @@ public class ExtensionLoader<T> {
 
     @SuppressWarnings("unchecked")
     public T getAdaptiveExtension() {
+        /**
+         * protocolSPI = this.getExtensionLoader(Protocol.class).getAdaptiveExtension();
+         *
+         */
         checkDestroyed();
         Object instance = cachedAdaptiveInstance.get();
         if (instance == null) {
@@ -708,6 +731,7 @@ public class ExtensionLoader<T> {
 
             synchronized (cachedAdaptiveInstance) {
                 instance = cachedAdaptiveInstance.get();
+                //通过双重检查创建cacheAdaptiveInstance对象才能够，接口对应的适配器对象就保存在这个对象中
                 if (instance == null) {
                     try {
                         instance = createAdaptiveExtension();
@@ -749,23 +773,73 @@ public class ExtensionLoader<T> {
 
     @SuppressWarnings("unchecked")
     private T createExtension(String name, boolean wrap) {
+        /**
+         * 根据name查抄对应的扩展实现的class对象，比如dubbo这个name对应着
+         * dubbo=org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol
+         */
         Class<?> clazz = getExtensionClasses().get(name);
         if (clazz == null || unacceptableExceptions.contains(name)) {
             throw findException(name);
         }
         try {
+            /**
+             * getExtension方法 如果extension不存在则会创建Extension，从这里我们看到这个方法只会加载某一个扩展接口实现的class
+             * 对象的实例。但是在某些情况下我们需要创建接口的全部实现类对象。比如ProtocolFilterWrapper类中的
+             * buildInvokerChain方法在建立Filter责任链时，需要把属于某一个group的所有filter都放到责任链中，其实通过
+             * 如下方式来获取属于某个组的Filter扩展实现类的：
+             * List<Filter> filters =ExtensionLoader.getExtensionLoader(Filter.class).getActiveExtension(invoker.getUrl(),key ,group)
+             *
+             * 比如，当服务端启动时只会加载group 为provider的filter扩展实现类：
+             * @Active(group=Constants.provider ,value=Constants.executes_key)
+             * public class ExecuteLimitFilter implement Filter
+             *
+             * 当消费端启动时只会加载狗任凭为consume的filter扩展实现类：
+             * @Active（group=Constants.consumer,value=Constants.Active_key）
+             * public class AcitveLimitFilter implements Filter
+             *
+             *
+             * 另外还需要注意，并不是所有属于某个group的Filter都会被加载，还需要看其设置的value的值是否在URL里（用户是否设置了该value的属性）
+             * 比如ActiveLimitFilter 在默认情况下是不会在服务消费端加载到Filter链的，只有当消费端设置了并发活跃数actives属性时才会（
+             * 设置后actives属性就会出现在URL里了）
+             *
+             *
+             *
+             *
+             */
             T instance = (T) extensionInstances.get(clazz);
             if (instance == null) {
                 extensionInstances.putIfAbsent(clazz, createExtensionInstance(clazz));
                 instance = (T) extensionInstances.get(clazz);
                 instance = postProcessBeforeInitialization(instance, name);
+                /**
+                 * 注入Wrapper到扩展点
+                 */
                 injectExtension(instance);
                 instance = postProcessAfterInitialization(instance, name);
             }
 
+            /**
+             * Wrapper对扩展点实现进行功能增强
+             */
             if (wrap) {
                 List<Class<?>> wrapperClassesList = new ArrayList<>();
+                /**
+                 * cachedWrapperClasses  在 ExtensionLoader.getExtensionClass的时候加载
+                 * org.apache.dubbo.rpc.Protocol 文件
+                 * filter=org.apache.dubbo.rpc.cluster.filter.ProtocolFilterWrapper
+                 *
+                 * 在读取到 配置文件中的Extension实现类的时候 会在下面的loadClass方法中判断这个方法是否是wrapper
+                 * org.apache.dubbo.common.extension.ExtensionLoader#loadClass(java.util.Map, java.net.URL, java.lang.Class, java.lang.String, boolean)
+                 *
+                 * 如果一个扩展接口实现类 他 存在一个接收接口类型参数的构造器，我们就说这个扩展实现类是一个Wrapper。
+                 * 比如 ProtocolFilterWrapper  和ProtocolListenerWrapper 都是 存在一个构造器，这个构造器接收Protocol
+                 * 类型的参数，因此它是一个Wrapper。
+                 *
+                 *
+                 *
+                 */
                 if (cachedWrapperClasses != null) {
+
                     wrapperClassesList.addAll(cachedWrapperClasses);
                     wrapperClassesList.sort(WrapperComparator.COMPARATOR);
                     Collections.reverse(wrapperClassesList);
@@ -778,6 +852,16 @@ public class ExtensionLoader<T> {
                             ((ArrayUtils.isEmpty(wrapper.matches()) || ArrayUtils.contains(wrapper.matches(), name)) &&
                                 !ArrayUtils.contains(wrapper.mismatches(), name));
                         if (match) {
+                            /**
+                             * 最开始instance 是DubboProtocol， 存在两个Wrapper  ProtocolFilterWrapper和ProtocolListenerWrapper。
+                             * 遍历第一个Wrapper 创建Wrapper实例对象，同时将DubboProtocol传入Wrapper。
+                             * 然后将Wrapper 对象作为insatnce  再次遍历第二个wrapper 创建第二个wrapper对象实例，同时将第一个wrapper对象实例传入到第二个
+                             * wrapper对象实例中。 因此DubboProtocol对象被包装了两次。
+                             * 适配器Protocol$Adaptive的export方法，如果url对象里面的protocol是dubbo，那么在扩展点自动包装时 ，protocol.export
+                             * 返回的就是ProtocolFilterWrapper的实例了。
+                             *
+                             *
+                             */
                             instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
                             instance = postProcessAfterInitialization(instance, name);
                         }
@@ -840,15 +924,28 @@ public class ExtensionLoader<T> {
                 if (method.isAnnotationPresent(DisableInject.class)) {
                     continue;
                 }
+                /**
+                 * 第一个参数是原始类型，则不需要自动注入。 相当于set方法的第一个参数是原始类型
+                 */
                 Class<?> pt = method.getParameterTypes()[0];
                 if (ReflectUtils.isPrimitives(pt)) {
                     continue;
                 }
 
                 try {
+                    /**
+                     * 查看set方法设置的变量是不是有扩展接口实现
+                     * step1获取set方法对应的属性名
+                     */
                     String property = getSetterProperty(method);
+                    /**
+                     * 查看该属性类似是否存在扩展实现
+                     */
                     Object object = injector.getInstance(pt, property);
                     if (object != null) {
+                        /**
+                         * 如果存在则反射调用set方法进行属性注入
+                         */
                         method.invoke(instance, object);
                     }
                 } catch (Exception e) {
@@ -910,6 +1007,9 @@ public class ExtensionLoader<T> {
             synchronized (cachedClasses) {
                 classes = cachedClasses.get();
                 if (classes == null) {
+                    /**
+                     * 加载扩展接口的所有实现类对象
+                     */
                     classes = loadExtensionClasses();
                     cachedClasses.set(classes);
                 }
@@ -923,6 +1023,9 @@ public class ExtensionLoader<T> {
      */
     private Map<String, Class<?>> loadExtensionClasses() {
         checkDestroyed();
+        /**
+         * 获取默认扩展名
+         */
         cacheDefaultExtensionName();
 
         Map<String, Class<?>> extensionClasses = new HashMap<>();
@@ -932,6 +1035,9 @@ public class ExtensionLoader<T> {
 
             // compatible with old ExtensionFactory
             if (this.type == ExtensionInjector.class) {
+                /**
+                 * 指定目录的jar中查找扩展点
+                 */
                 loadDirectory(extensionClasses, strategy, ExtensionFactory.class.getName());
             }
         }
@@ -951,6 +1057,9 @@ public class ExtensionLoader<T> {
      * extract and cache default extension name if exists
      */
     private void cacheDefaultExtensionName() {
+        /**
+         * 获取扩展接口上的SPI注解
+         */
         final SPI defaultAnnotation = type.getAnnotation(SPI.class);
         if (defaultAnnotation == null) {
             return;
@@ -964,6 +1073,9 @@ public class ExtensionLoader<T> {
                     + ": " + Arrays.toString(names));
             }
             if (names.length == 1) {
+                /**
+                 * SPI默认实现类名称放入到cachedDefaultName
+                 */
                 cachedDefaultName = names[0];
             }
         }
@@ -1228,8 +1340,18 @@ public class ExtensionLoader<T> {
     @SuppressWarnings("unchecked")
     private T createAdaptiveExtension() {
         try {
+            /**
+             * 创建适配器类的对象实例
+             *
+             */
             T instance = (T) getAdaptiveExtensionClass().newInstance();
             instance = postProcessBeforeInitialization(instance, null);
+            /**
+             * 注入适配器依赖的其他扩展点
+             *
+             * 扩展点之间的依赖自动注入
+             *
+             */
             instance = injectExtension(instance);
             instance = postProcessAfterInitialization(instance, null);
             initExtension(instance);
@@ -1240,6 +1362,10 @@ public class ExtensionLoader<T> {
     }
 
     private Class<?> getAdaptiveExtensionClass() {
+        /**
+         * 加载扩展接口的所有实现类的class对象
+         *
+         */
         getExtensionClasses();
         if (cachedAdaptiveClass != null) {
             return cachedAdaptiveClass;
@@ -1257,9 +1383,22 @@ public class ExtensionLoader<T> {
         } catch (Throwable ignore) {
 
         }
+        /**
+         * 根据SPI扩展接口生成器对应的适配器类的源码，返回一个字符串
+         */
         String code = new AdaptiveClassCodeGenerator(type, cachedDefaultName).generate();
+        /**
+         * 增加SPI选择扩展接口compiler的实现
+         */
         org.apache.dubbo.common.compiler.Compiler compiler = extensionDirector.getExtensionLoader(
             org.apache.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
+        /**
+         * 根据源码生成class对象
+         *
+         * Dubbo框架会为每个扩展接口生成其对应的适配器类的源码，然后选择具体的动态编译类的扩展实现对源码进行编译以生成适配器类的class对象
+         * 然后就可以额调用class对象的newInstance方法生成扩展接口对应的适配器类的实例。
+         *
+         */
         return compiler.compile(type, code, classLoader);
     }
 

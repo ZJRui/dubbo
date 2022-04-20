@@ -104,6 +104,11 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
      */
     private static final Map<String, Integer> RANDOM_PORT_MAP = new HashMap<String, Integer>();
 
+    /**
+     * Protocol protocol=ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension()
+     * 这里的ExtensionLoader类似JDK标准SPI中的ServiceLoader
+     *
+     */
     private Protocol protocolSPI;
 
     /**
@@ -151,6 +156,9 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
     @Override
     protected void postProcessAfterScopeModelChanged(ScopeModel oldScopeModel, ScopeModel newScopeModel) {
         super.postProcessAfterScopeModelChanged(oldScopeModel, newScopeModel);
+        /**
+         * getAdaptiveExtension获取接口的适配器类
+         */
         protocolSPI = this.getExtensionLoader(Protocol.class).getAdaptiveExtension();
         proxyFactory = this.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
     }
@@ -383,8 +391,10 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
 
         repository.registerProvider(providerModel);
 
+        ////根据注册中心配置配置，每一个url，dubbo内部基本都是url参数驱动操作的，这里拼接注册服务url，因此格式是:registry://xxxxxxxxxxx这样的
         List<URL> registryURLs = ConfigValidationUtils.loadRegistries(this, true);
 
+        //根据serviceConfig中配置的protocol，循环注册不同协议服务
         for (ProtocolConfig protocolConfig : protocols) {
             String pathKey = URL.buildKey(getContextPath(protocolConfig)
                     .map(p -> p + "/" + path)
@@ -641,6 +651,10 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrl(URL url, boolean withMetaData) {
+        /**
+         * 这里的ref就是我们服务的实现类实例。
+         * ProxyFactory就是扩展服务ProxyFactory的适配器类。
+         */
         Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
         if (withMetaData) {
             invoker = new DelegateProviderMetaDataInvoker(invoker, this);

@@ -24,6 +24,13 @@ import org.apache.dubbo.common.extension.SPI;
  */
 @SPI(value = "javassist", scope = ExtensionScope.FRAMEWORK)
 public interface Compiler {
+    /**
+     * 正常情况下是把所有的源文件静态编译为自己吗文件，然后由JVM统一加载，而动态编译则是在JVM进程运行时把源文件编译为字节码文件，然后使用
+     * 字节码文件创建对象实例。
+     * Dubbo框架中框架会给每个SPI扩展接口动态生成一个对应的适配器类，那么如何生成呢？ 这里就使用了动态编译技术。
+     * 在Dubbo中提供了一个Compiler的SPI
+     * Dubbo提供的Compiler实现有JavassistCompiler和JdkCompiler两种
+     */
 
     /**
      * Compile java source code.
