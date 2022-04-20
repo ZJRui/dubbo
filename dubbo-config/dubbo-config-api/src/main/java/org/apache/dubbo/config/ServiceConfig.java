@@ -228,6 +228,7 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
                 this.init();
 
                 if (shouldDelay()) {
+                    //延迟发布
                     doDelayExport();
                 } else {
                     doExport();
@@ -564,15 +565,21 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
     }
 
     private void exportUrl(URL url, List<URL> registryURLs) {
+        /**
+         * 导出服务： 本地服务和远程服务
+         */
         String scope = url.getParameter(SCOPE_KEY);
         // don't export when none is configured
         if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
 
+
+            //如果不是 scope_remote则导出本地服务
             // export to local if the config is not remote (export to remote only when config is remote)
             if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
                 exportLocal(url);
             }
 
+            //如果不是scope_local则导出远程服务
             // export to remote if the config is not local (export to local only when config is local)
             if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
                 url = exportRemote(url, registryURLs);
