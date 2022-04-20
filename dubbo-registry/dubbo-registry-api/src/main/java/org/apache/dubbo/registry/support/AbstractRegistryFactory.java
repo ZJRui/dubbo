@@ -73,6 +73,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory, ScopeM
         Registry registry = null;
         boolean check = url.getParameter(CHECK_KEY, true) && url.getPort() != 0;
         // Lock the registry access process to ensure a single instance of the registry
+        //独占锁保证同时只有一个线程实例创建服务注册实例
         registryManager.getRegistryLock().lock();
         try {
             // double check
@@ -86,6 +87,9 @@ public abstract class AbstractRegistryFactory implements RegistryFactory, ScopeM
                 return registry;
             }
             //create registry by spi/ioc
+            /**
+             * 创建服务注册中心实例
+             */
             registry = createRegistry(url);
         } catch (Exception e) {
             if (check) {

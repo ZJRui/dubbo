@@ -97,6 +97,9 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
         // find handler by message class.
         Object msg = req.getData();
         try {
+            /**
+             * 调用DubboProtocol的reply方法
+             */
             CompletionStage<Object> future = handler.reply(channel, msg);
             future.whenComplete((appResult, t) -> {
                 try {
@@ -171,13 +174,27 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
             if (request.isEvent()) {
                 handlerEvent(channel, request);
             } else {
+                /**
+                 * 需要有返回值的请求 req-res twoWay
+                 */
                 if (request.isTwoWay()) {
                     handleRequest(exchangeChannel, request);
-                } else {
+                } else { //不需要有返回值的请求 req  oneWay
+                    /**
+                     * DubboProtocol中的RequestHandler对象 实现了ExchangeHandler 接口， exchangeHandler接口继承自ChannelHandler 接口。
+                     * RequestHandler对象被 HeaderExchangeHandler对象包装。
+                     * 在HeaderExchangeHandler#received(org.apache.dubbo.remoting.Channel, java.lang.Object)
+                     * 方法中会调用requestHandler的received方法. 这个received 方法是ChannelHandler的。
+                     * RequestHandler的 received方法中又调用了reply方法
+                     *
+                     *
+                     * 这个handler对象就是DubboProtocol对象中的RequestHandler属性
+                     */
+
                     handler.received(exchangeChannel, request.getData());
                 }
             }
-        } else if (message instanceof Response) {
+        } else if (message instanceof Response) {//响应，也就是当前NettyClient收到其他的server 的响应
             handleResponse(channel, (Response) message);
         } else if (message instanceof String) {
             if (isClientSide(channel)) {

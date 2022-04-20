@@ -110,9 +110,24 @@ public class DubboProtocol extends AbstractProtocol {
 
     private ExchangeHandler requestHandler = new ExchangeHandlerAdapter() {
 
+
+        /**
+         *
+         * @param channel
+         * @param message
+         * @return
+         * @throws RemotingException
+         */
         @Override
         public CompletableFuture<Object> reply(ExchangeChannel channel, Object message) throws RemotingException {
 
+            /**
+             * DubboProtocol中的RequestHandler对象 实现了ExchangeHandler 接口， exchangeHandler接口继承自ChannelHandler 接口。
+             * RequestHandler对象被 HeaderExchangeHandler对象包装。
+             * 在HeaderExchangeHandler#received(org.apache.dubbo.remoting.Channel, java.lang.Object)
+             * 方法中会调用requestHandler的received方法. 这个received 方法是ChannelHandler的。
+             * RequestHandler的 received方法中又调用了reply方法
+             */
             if (!(message instanceof Invocation)) {
                 throw new RemotingException(channel, "Unsupported request: "
                         + (message == null ? null : (message.getClass().getName() + ": " + message))
@@ -120,6 +135,38 @@ public class DubboProtocol extends AbstractProtocol {
             }
 
             Invocation inv = (Invocation) message;
+            /*
+             *  那么问题 就是 Invoker对象的invoke方法 何时被调用？ 也就是什么时候在哪里收到  触发Invoker的invoke执行
+             *  从而执行wrapper的invokeMethod，从而执行服务提供者的方法？
+             *
+             *  服务发布的时候虽然得到了Invoker对象，还需要使用Protocol对象对外发布
+             *  Exporter<?> exporter = protocolSPI.export(invoker);--->protocolSPI 其实是Protocol$Adaptive 最终会执行DubboProtocol的export
+             *  对于DubboProtocol而言，在其export方法中会创建一个DubboExporter对象，这个DubboExporter对象中持有Invoker对象。
+             *  同时DubboProtocol的export在创建Export对象的时候 会将DubboProtocol对象的一个Map<String, Exporter<?>> exporterMap
+             *  属性传递给DubboExporter对象，然后DubboExporter对象将自身放置到这个Map中。 这个map的key是serviceKey。
+             *  export的时候还会创建一个nettyServer.
+             *  DubboProtocol对象中有一个ExchangeHandler requestHandler， DubboProtocol的exptor方法会针对不同的服务只开启一个nettyServer。
+             *  在创建NettyServer的时候会 传递 requestHandler给NettyServer，因此当消息来临的时候就会执行 requestHandler的方法
+             *
+             *  当服务提供者端收到消息请求的时候会执行org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#requestHandler 的reply方法。
+             *  requestHandler首先从请求中取出serviceKey，然后在DubboProtocol对象的Map中根据serviceKey找到 DubboExporter对象，
+             *  然后根据export对象找到Invoker对象，然后读取请求中要执行的方法名称和参数等信息封装成Invocation。最终执行Invoker的invoke方法。
+             *
+             *===================
+              我们知道 在org.apache.dubbo.config.ServiceConfig#doExportUrl(org.apache.dubbo.common.URL, boolean)
+             * Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
+             * 得到的Invoker是 JavassistProxyFactory中创建的一个 new AbstractProxyInvoker
+             *
+             *   然后在 serviceconfig的doExportUrl中执行
+             *   Exporter<?> exporter = protocolSPI.export(invoker);
+             *   这里的protocolSPI是RegistryProtocol，RegistryProtocol的export方法中 会执行RegistryProtocol的doLocalExport
+             *   在执行doLocalExport之前对 originInvoker(new  AbstractProxyInvoker)进行了一次 包装InvokerDelegate，
+             *   然后使用protocol（DubboProtocol）进行export.  因此 我们说 DubboProtocol export方法中接收的实际上是
+             * RegistryProtocol中的InvokerDelegate。   InvokerDelegate持有 new AbstractProxyInvoker。
+             * InvokeDelegate的invoke方法会调用new AbstractProxyInvoker的invoke
+             *
+             *
+             */
             Invoker<?> invoker = getInvoker(channel, inv);
             inv.setServiceModel(invoker.getUrl().getServiceModel());
             // switch TCCL
@@ -150,6 +197,23 @@ public class DubboProtocol extends AbstractProtocol {
                 }
             }
             RpcContext.getServiceContext().setRemoteAddress(channel.getRemoteAddress());
+            /*
+             *  那么问题 就是 Invoker对象的invoke方法 何时被调用？ 也就是什么时候在哪里收到  触发Invoker的invoke执行
+             *  从而执行wrapper的invokeMethod，从而执行服务提供者的方法？
+             *
+             *  服务发布的时候虽然得到了Invoker对象，还需要使用Protocol对象对外发布
+             *  Exporter<?> exporter = protocolSPI.export(invoker);--->protocolSPI 其实是Protocol$Adaptive 最终会执行DubboProtocol的export
+             *  对于DubboProtocol而言，在其export方法中会创建一个DubboExporter对象，这个DubboExporter对象中持有Invoker对象。
+             *  同时DubboProtocol的export在创建Export对象的时候 会将DubboProtocol对象的一个Map<String, Exporter<?>> exporterMap
+             *  属性传递给DubboExporter对象，然后DubboExporter对象将自身放置到这个Map中。 这个map的key是serviceKey。
+             *  export的时候还会创建一个nettyServer.
+             *  DubboProtocol对象中有一个ExchangeHandler requestHandler， DubboProtocol的exptor方法会针对不同的服务只开启一个nettyServer。
+             *  在创建NettyServer的时候会 传递 requestHandler给NettyServer，因此当消息来临的时候就会执行 requestHandler的方法
+             *
+             *  当服务提供者端收到消息请求的时候会执行org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#requestHandler 的reply方法。
+             *  requestHandler首先从请求中取出serviceKey，然后在DubboProtocol对象的Map中根据serviceKey找到 DubboExporter对象，
+             *  然后根据export对象找到Invoker对象，然后读取请求中要执行的方法名称和参数等信息封装成Invocation。最终执行Invoker的invoke方法。
+             */
             Result result = invoker.invoke(inv);
             return result.thenApply(Function.identity());
         }
@@ -215,11 +279,18 @@ public class DubboProtocol extends AbstractProtocol {
          * @return
          */
         private Invocation createInvocation(Channel channel, URL url, String methodKey) {
+            /**
+             * 如果Url中不包含key则直接返回
+             */
             String method = url.getParameter(methodKey);
             if (method == null || method.length() == 0) {
                 return null;
             }
 
+            /**
+             * 根据method创建Invocation对象
+             *
+             */
             RpcInvocation invocation = new RpcInvocation(url.getServiceModel(), method, url.getParameter(INTERFACE_KEY), "", new Class<?>[0], new Object[0]);
             invocation.setAttachment(PATH_KEY, url.getPath());
             invocation.setAttachment(GROUP_KEY, url.getGroup());
@@ -311,8 +382,28 @@ public class DubboProtocol extends AbstractProtocol {
         checkDestroyed();
         URL url = invoker.getUrl();
 
+        /**
+         * Inovker到Exporter的转换
+         */
         // export service.
         String key = serviceKey(url);
+        /*
+         *  那么问题 就是 Invoker对象的invoke方法 何时被调用？ 也就是什么时候在哪里收到  触发Invoker的invoke执行
+         *  从而执行wrapper的invokeMethod，从而执行服务提供者的方法？
+         *
+         *  服务发布的时候虽然得到了Invoker对象，还需要使用Protocol对象对外发布
+         *  Exporter<?> exporter = protocolSPI.export(invoker);--->protocolSPI 其实是Protocol$Adaptive 最终会执行DubboProtocol的export
+         *  对于DubboProtocol而言，在其export方法中会创建一个DubboExporter对象，这个DubboExporter对象中持有Invoker对象。
+         *  同时DubboProtocol的export在创建Export对象的时候 会将DubboProtocol对象的一个Map<String, Exporter<?>> exporterMap
+         *  属性传递给DubboExporter对象，然后DubboExporter对象将自身放置到这个Map中。 这个map的key是serviceKey。
+         *  export的时候还会创建一个nettyServer.
+         *  DubboProtocol对象中有一个ExchangeHandler requestHandler， DubboProtocol的exptor方法会针对不同的服务只开启一个nettyServer。
+         *  在创建NettyServer的时候会 传递 requestHandler给NettyServer，因此当消息来临的时候就会执行 requestHandler的方法
+         *
+         *  当服务提供者端收到消息请求的时候会执行org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#requestHandler 的reply方法。
+         *  requestHandler首先从请求中取出serviceKey，然后在DubboProtocol对象的Map中根据serviceKey找到 DubboExporter对象，
+         *  然后根据export对象找到Invoker对象，然后读取请求中要执行的方法名称和参数等信息封装成Invocation。最终执行Invoker的invoke方法。
+         */
         DubboExporter<T> exporter = new DubboExporter<T>(invoker, key, exporterMap);
 
         //export a stub service for dispatching event
@@ -329,6 +420,9 @@ public class DubboProtocol extends AbstractProtocol {
             }
         }
 
+        /**
+         * 同一个机器的不同服务导出只会开启一个NettyServer
+         */
         openServer(url);
         optimizeSerialization(url);
 
@@ -338,10 +432,24 @@ public class DubboProtocol extends AbstractProtocol {
     private void openServer(URL url) {
         checkDestroyed();
         // find server.
+        /**
+         * 提供者的机器地址ip:port
+         */
         String key = url.getAddress();
+        /**
+         * 只有服务提供者才会启动监听。
+         *
+         * 首先获取当前机器地址信息 作为key，然后判断当前是否为服务提供端。如果是，则以此key为key查看缓存serverMap中是否有对应的Server，
+         * 如果没有则调用createServer方法来创建，否则返回缓存中的value。
+         * 由于每个机器的ipport是唯一的，所以多个不同服务启动时只有第一个会被创建，，后面的服务都是直接从缓存中返回的
+         *
+         */
         // client can export a service which only for server to invoke
         boolean isServer = url.getParameter(IS_SERVER_KEY, true);
         if (isServer) {
+            /**
+             * key 是ipport，因此只会创建一个nettyServer
+             */
             ProtocolServer server = serverMap.get(key);
             if (server == null) {
                 synchronized (this) {
@@ -381,6 +489,26 @@ public class DubboProtocol extends AbstractProtocol {
 
         ExchangeServer server;
         try {
+            /**
+             * 这个requestHandler 被传递到 HeaderExchanger 的bind方法中
+             * 在headerExchanger的bind方法中 创建了一个HeaderExchangeHandler 包装requestHandler
+             *
+             * 然后又创建了一个DecodeHandler 包装 HeaderExchangeHandler
+             * 然后这个DecodeHandler被传递到NettyTransporter的bind方法中 在这个bind方法中创建NettyServer
+             *
+             *
+             * nettyServer对象本身作为一个ChannelHandler，而且NettyServer对象的构造函数接收channelHandler对象
+             * NettyServer->AbstractServer->AbstractEndpoint->AbstractPeer->ChannelHandler
+             *
+             *  这样所有的ChannelHandler都汇聚到了Dubbo的NettyServer这个ChannelHandler中
+             *
+             *在 org.apache.dubbo.remoting.transport.netty.NettyServer#doOpen()方法中 会启动Netty。同时
+             * 在doOpen方法中 又创建了一个 NettyHandler 对象，这个NettyHandler对象也是一个ChannelHandler，同时将nettyServer 传递给
+             * 这个NettyHandler。 最终这个nettyHandler被添加到 NettyPipeline中。
+             *
+             *  这就是requestHandler 的调用逻辑
+             *
+             */
             server = Exchangers.bind(url, requestHandler);
         } catch (RemotingException e) {
             throw new RpcException("Fail to start server(url: " + url + ") " + e.getMessage(), e);

@@ -831,6 +831,8 @@ public class ExtensionLoader<T> {
                  * 在读取到 配置文件中的Extension实现类的时候 会在下面的loadClass方法中判断这个方法是否是wrapper
                  * org.apache.dubbo.common.extension.ExtensionLoader#loadClass(java.util.Map, java.net.URL, java.lang.Class, java.lang.String, boolean)
                  *
+                 * 也就是说getExtensionClasses中的loadDirectory方法除了加载扩展接口的所有实现类的class对象，还对包装类wrapper进行了收集。
+                 *
                  * 如果一个扩展接口实现类 他 存在一个接收接口类型参数的构造器，我们就说这个扩展实现类是一个Wrapper。
                  * 比如 ProtocolFilterWrapper  和ProtocolListenerWrapper 都是 存在一个构造器，这个构造器接收Protocol
                  * 类型的参数，因此它是一个Wrapper。
@@ -1009,6 +1011,9 @@ public class ExtensionLoader<T> {
                 if (classes == null) {
                     /**
                      * 加载扩展接口的所有实现类对象
+                     *
+                     * getExtensionClasses中的loadDirectory方法除了加载扩展接口的所有实现类的class对象，
+                     * 还对包装类wrapper进行了收集。
                      */
                     classes = loadExtensionClasses();
                     cachedClasses.set(classes);
@@ -1218,11 +1223,22 @@ public class ExtensionLoader<T> {
                 type + ", class line: " + clazz.getName() + "), class "
                 + clazz.getName() + " is not subtype of interface.");
         }
+        /**
+         * 如果是适配器类，则调用cacheAdaptiveClass
+         *
+         */
         if (clazz.isAnnotationPresent(Adaptive.class)) {
             cacheAdaptiveClass(clazz, overridden);
         } else if (isWrapperClass(clazz)) {
+            /**
+             * 如果是Wrapper类则调用cacheWrapperClass方法来做缓存。
+             * ProtocolFilterWrapper 这个类就是一个wrapper类
+             * 他在 dubbo/internal/org.apache.dubbo.rpc.Protocol文件中配置了
+             * filter=org.apache.dubbo.rpc.cluster.filter.ProtocolFilterWrapper
+             */
             cacheWrapperClass(clazz);
         } else {
+
             if (StringUtils.isEmpty(name)) {
                 name = findAnnotationName(clazz);
                 if (name.length() == 0) {
@@ -1235,6 +1251,7 @@ public class ExtensionLoader<T> {
                 cacheActivateClass(clazz, names[0]);
                 for (String n : names) {
                     cacheName(clazz, n);
+                    //保存扩展点的实现类
                     saveInExtensionClass(extensionClasses, clazz, n, overridden);
                 }
             }

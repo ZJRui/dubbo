@@ -31,6 +31,19 @@ import java.util.concurrent.RejectedExecutionException;
 
 public class AllChannelHandler extends WrappedChannelHandler {
 
+    /**
+     * NettyServer 本身是一个ChannelHandler，其构造器中会执行ChannelHandler.wrap方法会导致 通过AllDispatcher
+     * 创建一个 AllChannelHandler 。
+     *
+     * 消费端发起TCP链接并完成后，服务提供方法的NettyServer的connected方法会被激活，该方法的执行是在Netty的IO线程上执行的。
+     *
+     * 为了可以及时释放IO线程，Netty默认的线程模型为All，所有消息都派发到Dubbo内部的业务线程池，这些消息包括请求事件、响应事件、
+     * 连接事件、断开事件、心跳事件，这里对应的是AllChannelHandler类把IO线程接收到的所有消息包装为ChannelEventRunnable任务并投递到
+     * 线程池中。
+     *
+     * 最终会执行DubboProtocol中的requestHandler的connected方法
+     *
+     */
     public AllChannelHandler(ChannelHandler handler, URL url) {
         super(handler, url);
     }

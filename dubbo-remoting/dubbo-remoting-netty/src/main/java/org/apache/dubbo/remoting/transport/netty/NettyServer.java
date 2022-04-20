@@ -64,6 +64,18 @@ public class NettyServer extends AbstractServer implements RemotingServer {
     private org.jboss.netty.channel.Channel channel;
 
     public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
+        /**
+         * NettyServer 本身是一个ChannelHandler，其构造器中会执行ChannelHandler.wrap方法会导致 通过AllDispatcher
+         * 创建一个 AllChannelHandler 。
+         *
+         * 消费端发起TCP链接并完成后，服务提供方法的NettyServer的connected方法会被激活，该方法的执行是在Netty的IO线程上执行的。
+         *
+         * 为了可以及时释放IO线程，Netty默认的线程模型为All，所有消息都派发到Dubbo内部的业务线程池，这些消息包括请求事件、响应事件、
+         * 连接事件、断开事件、心跳事件，这里对应的是AllChannelHandler类把IO线程接收到的所有消息包装为ChannelEventRunnable任务并投递到
+         * 线程池中。
+         *
+         *
+         */
         super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ChannelHandlers.wrap(handler, url));
     }
 
@@ -75,6 +87,38 @@ public class NettyServer extends AbstractServer implements RemotingServer {
         ChannelFactory channelFactory = new NioServerSocketChannelFactory(boss, worker, getUrl().getPositiveParameter(IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS));
         bootstrap = new ServerBootstrap(channelFactory);
 
+        /**
+         * NettyHandler实现了 Netty的SimpleChannelHandler
+         *
+         * 注意这里 创建NettyHandler的时候传递了this NettyServer对象， NettyServer对象本质上是一个ChannelHandler
+         *
+         * NettyServer->AbstractServer->AbstractEndpoint->AbstractPeer->ChannelHandler
+         *
+         * nettyServer对象本身作为一个ChannelHandler，而且NettyServer对象的构造函数接收channelHandler对象
+         *
+         * ================
+         * 我们知道 DubboProtocol中有一个ChannelHandler，当方法调用请求到来的时候会执行这个requestHandler，这个requestHandler是如何传递到Netty中的？
+         *
+         * 在DubboProtocol#createServer()方法中requestHandler 被传递到 HeaderExchanger 的bind方法中
+         * 在headerExchanger的bind方法中 创建了一个HeaderExchangeHandler 包装requestHandler
+         *
+         * 然后又创建了一个DecodeHandler 包装 HeaderExchangeHandler
+         * 然后这个DecodeHandler被传递到NettyTransporter的bind方法中 在这个bind方法中创建NettyServer
+         *
+         *
+         * nettyServer对象本身作为一个ChannelHandler，而且NettyServer对象的构造函数接收channelHandler对象
+         * NettyServer->AbstractServer->AbstractEndpoint->AbstractPeer->ChannelHandler
+         *
+         *  这样所有的ChannelHandler都汇聚到了Dubbo的NettyServer这个ChannelHandler中
+         *
+         *在 org.apache.dubbo.remoting.transport.netty.NettyServer#doOpen()方法中 会启动Netty。同时
+         * 在doOpen方法中 又创建了一个 NettyHandler 对象，这个NettyHandler对象也是一个ChannelHandler，同时将nettyServer 传递给
+         * 这个NettyHandler。 最终这个nettyHandler被添加到 NettyPipeline中。
+         *
+         *  这就是requestHandler 的调用逻辑
+         *
+         *
+         */
         final NettyHandler nettyHandler = new NettyHandler(getUrl(), this);
         channels = nettyHandler.getChannels();
         // https://issues.jboss.org/browse/NETTY-365
@@ -93,6 +137,12 @@ public class NettyServer extends AbstractServer implements RemotingServer {
                 }*/
                 pipeline.addLast("decoder", adapter.getDecoder());
                 pipeline.addLast("encoder", adapter.getEncoder());
+                /**
+                 * 将 Dubbo 实现的NettyHandler添加到 Pipeline
+                 *
+                 *
+                 *
+                 */
                 pipeline.addLast("handler", nettyHandler);
                 return pipeline;
             }

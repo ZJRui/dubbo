@@ -208,6 +208,11 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
     }
 
     private void register(Registry registry, URL registeredProviderUrl) {
+        /**
+         * Registery是ZookeeperRegistry ，但是ZookeeperRegistry 继承自FailbackRegistry
+         * 执行FailbackRegistry的register，然后会执行ZookeeperRegister的doRegister
+         * 最终执行zkClient的create方法将服务注册到zookeeper中
+         */
         registry.register(registeredProviderUrl);
     }
 
@@ -236,15 +241,28 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
 
         providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
         //export invoker
+        /**
+         *
+         * 先从invoker中抽取出服务提供者url，调用底层protocol(通过SPI 注入的具体protocol，比如dubbo protocol)
+         * 的export执行导出，然后从invoker抽取出注册中心url，在调用注册中心的factory获取注册中心，最后进行服务的注册。
+         *
+         * 调用底层Protocol导出服务
+         */
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
 
         // url to registry
+        /**
+         * 获取注册中心
+         */
         final Registry registry = getRegistry(registryUrl);
         final URL registeredProviderUrl = getUrlToRegistry(providerUrl, registryUrl);
 
         // decide if we need to delay publish (provider itself and registry should both need to register)
         boolean register = providerUrl.getParameter(REGISTER_KEY, true) && registryUrl.getParameter(REGISTER_KEY, true);
         if (register) {
+            /**
+             * 注册服务
+             */
             register(registry, registeredProviderUrl);
         }
 
@@ -290,6 +308,18 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         String key = getCacheKey(originInvoker);
 
         return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
+            /**
+             * 我们知道 在org.apache.dubbo.config.ServiceConfig#doExportUrl(org.apache.dubbo.common.URL, boolean)
+             * Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
+             * 得到的Invoker是 JavassistProxyFactory中创建的一个 new AbstractProxyInvoker
+             *
+             * 然后在 serviceconfig的doExportUrl中执行
+             *   Exporter<?> exporter = protocolSPI.export(invoker);
+             *   这里的protocolSPI是RegistryProtocol，RegistryProtocol的export方法中 会执行doLocalExport
+             *   在执行之前对 originInvoker(new  AbstractProxyInvoker)进行了一次 包装InvokerDelegate，
+             *   然后使用protocol（DubboProtocol）进行export
+             *
+             */
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
         });

@@ -66,6 +66,17 @@ public class Exchangers {
             throw new IllegalArgumentException("handler == null");
         }
         url = url.addParameterIfAbsent(Constants.CODEC_KEY, "exchange");
+        /**
+         *
+         * Exchanger是SPI，默认情况下是使用HeaderExchanger。
+         * HeaderExchanger的bind方法中会执行
+         * Transporters.bind(url, new DecodeHandler(new HeaderExchangeHandler(handler))
+         * 而Transports的bind方法中会
+         * getTransporter(url).bind(url, handler);
+         * Transport是扩展接口，所以需要先经过其适配器Transporter$Adaptive来根据URL里的参数做选择扩展实现
+         * 在默认情况下 ，传输扩展实现选择的是Netty，而Netty对应的扩展实现为 NettyTransporter
+         * NettyTransporter的bind方法中会new NettyServer
+         */
         return getExchanger(url).bind(url, handler);
     }
 
@@ -109,6 +120,9 @@ public class Exchangers {
 
     public static Exchanger getExchanger(URL url) {
         String type = url.getParameter(Constants.EXCHANGER_KEY, Constants.DEFAULT_EXCHANGER);
+        /**
+         *
+         */
         return url.getOrDefaultFrameworkModel().getExtensionLoader(Exchanger.class).getExtension(type);
     }
 

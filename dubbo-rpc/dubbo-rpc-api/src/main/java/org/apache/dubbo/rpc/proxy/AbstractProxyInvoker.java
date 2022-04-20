@@ -96,6 +96,10 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
                 }
             }
 
+            /**
+             * 具体执行本地服务调用
+             *
+             */
             Object value = doInvoke(proxy, invocation.getMethodName(), invocation.getParameterTypes(), invocation.getArguments());
 
             if (ProfilerSwitch.isEnableSimpleProfiler()) {
@@ -111,6 +115,10 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
             }
 
             CompletableFuture<Object> future = wrapWithFuture(value, invocation);
+            /**
+             * 对返回结果区分  如果返回二级果是completableFuture 或者使用RpcContext.startAsync开启异步执行的 则返回AsyncRpcResult对象
+             *
+             */
             CompletableFuture<AppResponse> appResponseFuture = future.handle((obj, t) -> {
                 AppResponse result = new AppResponse(invocation);
                 if (t != null) {
@@ -136,6 +144,10 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
     }
 
     private CompletableFuture<Object> wrapWithFuture(Object value, Invocation invocation) {
+        /**
+         * 对返回结果区分  如果返回二级果是completableFuture 或者使用RpcContext.startAsync开启异步执行的 则返回AsyncRpcResult对象
+         *
+         */
         if (value instanceof CompletableFuture) {
             invocation.put(PROVIDER_ASYNC_KEY, Boolean.TRUE);
             return (CompletableFuture<Object>) value;
