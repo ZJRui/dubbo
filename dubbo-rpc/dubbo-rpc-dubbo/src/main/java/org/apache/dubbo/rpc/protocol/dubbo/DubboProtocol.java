@@ -574,6 +574,24 @@ public class DubboProtocol extends AbstractProtocol {
         optimizeSerialization(url);
 
         // create rpc invoker.
+        /**
+         * getClient方法创见美服务消费端的NettyClient对象。
+         *
+         * 在getClient方法内部会创建NettyClient。这里有三个注意点：
+         * 第一点 由于一个服务提供者可以提供多个服务，那么消费者机器需要与同一个服务提供者机器提供的多个服务共享连接，还是与每个服务都建立一个连接？
+         *
+         * 第二点：消费端是启动时就与服务提供者机器建立好连接吗？
+         *
+         * 第三点：每个服务消费端与 服务提供者集群中的所有机器都有连接吗？
+         * toRouters方法中 其内部是吧具体服务的所有服务提供者的URL信息转换为了Invoker，也就是说服务消费端与服务提供者的所有机器都有连接。
+         *
+         *
+         * ===========
+         * DubboProtocol的refer方法返回一个DubboInvoker. ProtocolFilterWrapper是DubboProtocol的包装类，
+         * DubboProtocol返回的invoker 在ProtocolFilterWrapper的refer方法中 使用 buildInvokeChain 进行了装饰，使用一系列
+         * Filter形成了责任链，DubboInvoker被放置到责任链的末尾
+         *
+         */
         DubboInvoker<T> invoker = new DubboInvoker<T>(serviceType, url, getClients(url), invokers);
         invokers.add(invoker);
 
@@ -582,30 +600,50 @@ public class DubboProtocol extends AbstractProtocol {
 
     private ExchangeClient[] getClients(URL url) {
         // whether to share connection
-
+        /**
+         * 不同服务是否共享连接。 因为一个服务提供者机器可以提供多个服务，消费者需要与同一个服务提供者机器提供的多个服务共享连接还是与每个服务
+         * 都建立一个连接？
+         *在默认情况下当消费端引用同一个服务提供者机器上的多个服务时，这些服务复用同一个Netty链接。
+         */
         boolean useShareConnect = false;
 
         int connections = url.getParameter(CONNECTIONS_KEY, 0);
         List<ReferenceCountExchangeClient> shareClients = null;
         // if not configured, connection is shared, otherwise, one connection for one service
+        /**
+         * 如果没配置，则默认连接是共享的，否则每个服务单独有自己的链接。
+         */
         if (connections == 0) {
             useShareConnect = true;
 
             /*
              * The xml configuration should have a higher priority than properties.
+             * xml优先级高于属性配置
              */
             String shareConnectionsStr = url.getParameter(SHARE_CONNECTIONS_KEY, (String) null);
             connections = Integer.parseInt(StringUtils.isBlank(shareConnectionsStr) ? ConfigurationUtils.getProperty(url.getOrDefaultApplicationModel(), SHARE_CONNECTIONS_KEY,
                     DEFAULT_SHARE_CONNECTIONS) : shareConnectionsStr);
+            /**
+             * 获取共享NettyClient
+             */
             shareClients = getSharedClient(url, connections);
         }
 
+        /**
+         * 初始化NettyClient
+         */
         ExchangeClient[] clients = new ExchangeClient[connections];
         for (int i = 0; i < clients.length; i++) {
+            /**
+             * 共享则返回已经存在的
+             */
             if (useShareConnect) {
                 clients[i] = shareClients.get(i);
 
             } else {
+                /**
+                 * 否则创建新的
+                 */
                 clients[i] = initClient(url);
             }
         }
@@ -788,10 +826,19 @@ public class DubboProtocol extends AbstractProtocol {
             // enable heartbeat by default
             url = url.addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT));
 
-            // connection should be lazy
+            // connection should be lazy  惰性链接
             if (url.getParameter(LAZY_CONNECT_KEY, false)) {
                 client = new LazyConnectExchangeClient(url, requestHandler);
             } else {
+                /**
+                 * 及时链接
+                 *
+                 * 默认lazy为false，所以当消费者启动时就与提供者建立了链接。
+                 *
+                 * 注意这里的 requestHandler作为ChannelHandler 被传递得到NettyClient
+                 * 也就是NettyTransporter 的connect方法
+                 *
+                 */
                 client = Exchangers.connect(url, requestHandler);
             }
 

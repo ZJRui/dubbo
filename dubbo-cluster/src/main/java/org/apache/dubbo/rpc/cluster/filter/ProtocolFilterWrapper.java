@@ -71,6 +71,13 @@ public class ProtocolFilterWrapper implements Protocol {
             return protocol.refer(type, url);
         }
         FilterChainBuilder builder = getFilterChainBuilder(url);
+        /**
+         *DubboProtocol的refer方法返回一个DubboInvoker. ProtocolFilterWrapper是DubboProtocol的包装类，
+         * DubboProtocol返回的invoker 在ProtocolFilterWrapper的refer方法中 使用 buildInvokeChain 进行了装饰，使用一系列
+         * Filter形成了责任链，DubboInvoker被放置到责任链的末尾
+         *
+         * 下面代码先执行 protocol.refer
+         */
         return builder.buildInvokerChain(protocol.refer(type, url), REFERENCE_FILTER_KEY, CommonConstants.CONSUMER);
     }
 

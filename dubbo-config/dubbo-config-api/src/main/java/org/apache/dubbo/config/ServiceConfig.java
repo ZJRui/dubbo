@@ -391,7 +391,22 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
 
         repository.registerProvider(providerModel);
 
-        ////根据注册中心配置配置，每一个url，dubbo内部基本都是url参数驱动操作的，这里拼接注册服务url，因此格式是:registry://xxxxxxxxxxx这样的
+        /**
+         * 根据注册中心配置配置，每一个url，dubbo内部基本都是url参数驱动操作的，这里拼接注册服务url，因此格式是:registry://xxxxxxxxxxx这样的
+         * 获取到注册的Url，协议头是registery
+         *
+         * 我们说 protocolSPI = this.getExtensionLoader(Protocol.class).getAdaptiveExtension();
+         * Exporter<?> exporter = protocolSPI.export(invoker);
+         * 会执行Protocol$Adapter的getAdativeExtension方法 这个方法内会根据 url 解析 protocol
+         * 当前协议类型是registery，就会调用RegistryProtocol的export ,在RegistryProtocol对象的export方法内部会执行DubboProtocol的export
+         *
+         * 那么RegistryProtocol 为什么会直到使用 DubboProtocol呢，这是因为 我们在ServiceConfig中配置了ProtocolConfig
+         *比如<dubbo:protocol name="dubbo" id="dobbo">就是一个ProtocolConfig。
+         * 这个ProtocolConfig被 设置到  registryUrl中，  registerUrl使用registry://开头， ExtensionLoader返回RegistryProtocol
+         * RegistryProtocol对象的exprot方法中会根据ProtocolConfig中配置信息使用DubboProtocol。
+         *
+         *
+         */
         List<URL> registryURLs = ConfigValidationUtils.loadRegistries(this, true);
 
         //根据serviceConfig中配置的protocol，循环注册不同协议服务

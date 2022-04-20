@@ -187,6 +187,13 @@ public class ZookeeperRegistry extends CacheableFailbackRegistry {
                             urls.addAll(toUrlsWithEmpty(url, path, children));
                         }
                     }
+                    /**
+                     *
+                     * 上面从ZooKeeper获取服务提供者的地址列表，等Zookeeper返回地址列表后会调用RegistryDirectory的notify方法
+                     * 这里的listener就是 RegistryDirectory ,RegistryDirectory 继承自DynamicDirectory
+                     * DynamicDirectory 实现了NotifyListener 接口。
+                     *
+                     */
                     notify(url, listener, urls);
                 } finally {
                     // tells the listener to run only after the sync notification of main thread finishes.

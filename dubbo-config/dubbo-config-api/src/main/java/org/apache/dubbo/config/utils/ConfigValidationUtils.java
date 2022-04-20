@@ -190,6 +190,9 @@ public class ConfigValidationUtils {
 
     public static List<URL> loadRegistries(AbstractInterfaceConfig interfaceConfig, boolean provider) {
         // check && override if necessary
+        /**
+         * 首先是判断要注册的地址，从registries配置里拿,如果系统变量中配置了dubbo.registry.address,以这个值为准
+         */
         List<URL> registryList = new ArrayList<>();
         ApplicationConfig application = interfaceConfig.getApplication();
         List<RegistryConfig> registries = interfaceConfig.getRegistries();

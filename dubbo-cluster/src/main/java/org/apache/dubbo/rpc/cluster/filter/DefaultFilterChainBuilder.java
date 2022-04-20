@@ -42,10 +42,17 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
      */
     @Override
     public <T> Invoker<T> buildInvokerChain(final Invoker<T> originalInvoker, String key, String group) {
+
         Invoker<T> last = originalInvoker;
         URL url = originalInvoker.getUrl();
         List<ModuleModel> moduleModels = getModuleModelsFromUrl(url);
         List<Filter> filters;
+        /**
+         *
+         * ScopeModelUtil.getExtensionLoader(Filter.class, moduleModels.get(0)).getActivateExtension(url, key, group);
+         * 获取所有激活的Filter，然后使用链表方式形成责任链。
+         *
+         */
         if (moduleModels != null && moduleModels.size() == 1) {
             filters = ScopeModelUtil.getExtensionLoader(Filter.class, moduleModels.get(0)).getActivateExtension(url, key, group);
         } else if (moduleModels != null && moduleModels.size() > 1) {
@@ -64,11 +71,38 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
 
 
         if (!CollectionUtils.isEmpty(filters)) {
+            /**
+             * 假如我们有四个 ABCD Filter，
+             * 首先取出DFilter，此时last=originalInvoker ，这个OriginInvoker就是DubboProtocol中返回的DubboInvoker
+             * 然后创建一个CopyOfFilterChainNode 这个Node本质上是一个Invoker。
+             * 这个Invoker的next属性是DubboProtocol，Filter属性是D
+             *
+             * CopyOfFilterChainNode 这个Invoker内部的invoke方法本质上是执行了 Filter的 invoke方法。
+             *
+             * 然后 为 C Filter创建一个 CopyOfFilterChainNode ，这个Node的next 是  D_CopyOfFilterChainNode,filter是CFilter
+             *
+             *
+             */
             for (int i = filters.size() - 1; i >= 0; i--) {
                 final Filter filter = filters.get(i);
                 final Invoker<T> next = last;
                 last = new CopyOfFilterChainNode<>(originalInvoker, next, filter);
             }
+            /**
+             * 这里创建了一个调用链对象，这个调用链对象持有  last=A_CopyOfFilterChainNode.
+             * 在这个A_CopyOfFilterChainNode对象中，他的next属性是B_CopyOfFilterChainNode.,他的filter属性是 AFilter
+             *
+             * 在A_CopyOfFilterChainNode的invoke方法中 会执行AFilter的invoker方法 filter.invoke(nextNode, invocation);
+             * 传递nextNode是B_CopyOfFilterChainNode
+             * AFilter 的invoke方法内部会 使用接收到的 B_CopyOfFilterChainNode 执行其invoke方法。
+             * B_CopyOfFilterChainNode 的invoke内部会执行 Bfilter.invoke(nextNode,invocation)
+             * 这里传递的nextNode就是C_CopyOfFilterChianNode
+             * 从而时间 触发整个调用链的执行。
+             * 在D_CopyOfFilterChainNode内部 持有的NextNode就是DubboInvoker，Filter就是DFilter。
+             * 因此在D_CopyOfFilterChainNode的invoke方法中会执行DFIlter.invoke(dubbInvoker,invocation)
+             * 在DFilter内部最终会执行dubboInvoker的invoke方法。
+             *
+             */
             return new CallbackRegistrationInvoker<>(last, filters);
         }
 

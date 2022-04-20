@@ -177,6 +177,12 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
 
     public void subscribe(URL url) {
         setSubscribeUrl(url);
+        /**
+         * 注意这里传递了 DynamicDirectory作为Listener对象
+         * 这里的registry就是ZookeeperRegistry，因此会执行zookeeperRegistery的subscribe方法
+         * zookeeperRegistry继承自FailbackRegistry 因此追执行FailbackRegistry 的subscribe方法
+         *
+         */
         registry.subscribe(url, this);
     }
 

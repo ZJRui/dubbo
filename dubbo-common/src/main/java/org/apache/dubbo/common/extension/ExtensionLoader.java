@@ -812,7 +812,7 @@ public class ExtensionLoader<T> {
                 instance = (T) extensionInstances.get(clazz);
                 instance = postProcessBeforeInitialization(instance, name);
                 /**
-                 * 注入Wrapper到扩展点
+                 *
                  */
                 injectExtension(instance);
                 instance = postProcessAfterInitialization(instance, name);

@@ -148,6 +148,19 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
     //To solve the problem of RMI repeated exposure port conflicts, the services that have been exposed are no longer exposed.
     //provider url <--> exporter
     private final ConcurrentMap<String, ExporterChangeableWrapper<?>> bounds = new ConcurrentHashMap<>();
+    /**
+     * RegistryProtocol中有一个Protocol属性，但是没有看到这个属性是在哪里被赋值的。
+     * RegistryProtocol的export方法内部会使用这个protocol对Invoker进行export。
+     *
+     * 具体参考：org.apache.dubbo.config.ServiceConfig#doExportUrls()
+     *
+     * 那么问题是这个protocol属性什么时候被赋值在哪里被赋值？ 我猜测如下 Extension对象创建之后会 对这个扩展接口对象进行注入，注入的方式
+     * 就是遍历这个接口实现类的所有set方法， 如果set方法的第一个参数不是原始数据类型则对其进行注入依赖。具体参考如下方法，所以猜测这个protocol属性是不是
+     * 在创建RegistryProtocol的时候通过依赖注入 注入进来的，但是如果是注入进来的话，那么会注入哪个Protocol实现类呢？从createExtension的代码
+     * 看是注入了 Protocol对应的ExtensionLoader对象中的cachedAdaptiveInstance，也就是Protocol接口定义中通过@SPI注解指定的默认值，也就是DubboProtocol。
+     * org.apache.dubbo.common.extension.ExtensionLoader#createExtension(java.lang.String, boolean)
+     *
+     */
     protected Protocol protocol;
     protected ProxyFactory proxyFactory;
     //protected RegistryFactory registryFactory;
@@ -531,7 +544,16 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
             consumerAttribute
         );
         url = url.putAttribute(CONSUMER_URL_KEY, consumerUrl);
+        /**
+         * Migration移民
+         */
         ClusterInvoker<T> migrationInvoker = getMigrationInvoker(this, cluster, registry, type, url, consumerUrl);
+        /**
+         * 这个 interceptInvoker方法会间接触发RegistryDirectory的subScribe方法执行
+         * 在org.apache.dubbo.registry.integration.RegistryProtocol#doCreateInvoker方法 中执行
+         * directory.subscribe(toSubscribeUrl(urlToRegistry));//订阅服务提供者地址
+         *
+         */
         return interceptInvoker(migrationInvoker, url, consumerUrl);
     }
 
@@ -562,6 +584,25 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         }
 
         for (RegistryProtocolListener listener : listeners) {
+            /**
+             * 有一个 MigrationRuleListener
+             * 这个MigrationRuleListener 的onRefer方法中会执行 MigrationRuleHandler 的refreshInvoker
+             * 从而执行MigrationInvoker的refreshServiceDiscoveryInvoker
+             * 进而执行registryProtocol.getInvoker(cluster, registry, type, url);
+             * 进而执行RegistryProtocol.doCreateInvoker 然后执行 RegistryDirectory.subscribe
+             *
+             * 然后执行      zookeperregistry.subscribe(url, this);
+             * 然后执行 zookeeperRegistry.doSubscirbe
+             * 然后执行AbstractRegistry.notify
+             * 然后执行 RegistryDirectory.notify
+             * RegistryDirectory的notify中执行 refreshInvoker
+             * RegistyrDirectory的toInvokers
+             *
+             * toInvoker的最终会调用  invoker = protocol.refer(serviceType, url);这里的protocol就是DubboProtocol
+             *
+             * 在DubboProtocol的refer方法中会创建NettyClient
+             *
+             */
             listener.onRefer(this, invoker, consumerUrl, url);
         }
         return invoker;
@@ -597,9 +638,22 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
             registry.register(directory.getRegisteredConsumerUrl());
         }
         directory.buildRouterChain(urlToRegistry);
+
+        /**
+         *向注册中心订阅服务提供者的服务
+         * 这里会执行ZookeeperRegistry的doSubscribe
+         * 在doSubscribe方法的最后 获取到Zookeeper的服务提供者注册信息之后会执行
+         *   notify(url, listener, urls);
+         *
+         *   notify会执行AbstractRegistry的notify方法，在这个方法中会执行RegistryDirectory的notify方法
+         *
+         *   RegistryDirectory的notify方法中会执行refreshInvoker--->toInvokers
+         */
+
         directory.subscribe(toSubscribeUrl(urlToRegistry));
 
-        return (ClusterInvoker<T>) cluster.join(directory, true);
+        return (ClusterInvoker<T>) cluster.join(directory, true);//调用扩展接口Cluster的适配器的join方法，根据参数选择配置的集群容错策略
+
     }
 
     public <T> void reRefer(ClusterInvoker<?> invoker, URL newSubscribeUrl) {

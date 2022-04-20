@@ -164,6 +164,11 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
     protected void postProcessAfterScopeModelChanged(ScopeModel oldScopeModel, ScopeModel newScopeModel) {
         super.postProcessAfterScopeModelChanged(oldScopeModel, newScopeModel);
 
+        /**
+         * 在Protocol$Adaptive的refer方法内部，当我们设置了服务注册中心后，可以发现当前协议类型为registry
+         * ,也就是说这里需要调用RegistryProtocol的refer方法。但是RegistryProtocol被QosProtocolWrapper ProtocolFilterWrapper
+         * ProtocolListenerWrapper三个Wrapper类增强了。所以经过层层调用才会执行RegistryProtocol的refer方法
+         */
         protocolSPI = this.getExtensionLoader(Protocol.class).getAdaptiveExtension();
         proxyFactory = this.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
     }
@@ -282,6 +287,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
 
         serviceMetadata.getAttachments().putAll(referenceParameters);
 
+        /**
+         * 创建代理
+         */
         ref = createProxy(referenceParameters);
 
         serviceMetadata.setTarget(ref);
@@ -290,6 +298,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         consumerModel.setProxyObject(ref);
         consumerModel.initMethodModels();
 
+        /**
+         * 是否应该在启动时检查提供方是否可用
+         */
         checkInvokerAvailable();
     }
 
@@ -381,12 +392,19 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
 
     @SuppressWarnings({"unchecked"})
     private T createProxy(Map<String, String> referenceParameters) {
+        /**
+         * 是否需要打开本地引用
+         *
+         */
         if (shouldJvmRefer(referenceParameters)) {
             createInvokerForLocal(referenceParameters);
         } else {
             urls.clear();
             if (StringUtils.isNotEmpty(url)) {
                 // user specified URL, could be peer-to-peer address, or register center's address.
+                /**
+                 * 用户是否制定服务提供方地址：可以是服务提供方ip地址（直连方式）
+                 */
                 parseUrl(referenceParameters);
             } else {
                 // if protocols not in jvm checkRegistry
@@ -410,6 +428,11 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         MetadataUtils.publishServiceDefinition(consumerUrl, consumerModel.getServiceModel(), getApplicationModel());
 
         // create service proxy
+        /**
+         * 创建服务代理对象。
+         * 在服务提供方：proxyF.getInvoker的时候传递的是 服务提供者对象实例得到的是Invoker对象
+         * 而消费端： proxyFactory getProxy传递的是Invoker对象，返回的是服务提供者代理对象
+         */
         return (T) proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
     }
 
@@ -462,7 +485,12 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
      * Get URLs from the registry and aggregate them.
      */
     private void aggregateUrlFromRegistry(Map<String, String> referenceParameters) {
+        /**
+         * 根据服务注册中心装配Url对象
+         */
         checkRegistry();
+
+
         List<URL> us = ConfigValidationUtils.loadRegistries(this, false);
         if (CollectionUtils.isNotEmpty(us)) {
             for (URL u : us) {
@@ -489,8 +517,20 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void createInvokerForRemote() {
+        /**
+         * 只有一个服务中心时候
+         */
         if (urls.size() == 1) {
             URL curUrl = urls.get(0);
+            /**
+             * 服务暴露的第一步是调用Protocol扩展接口实现类的refer方法生成Invoker实例
+             *
+             * 在Protocol$Adaptive的refer方法内部，当我们设置了服务注册中心后，可以发现当前协议类型为registry
+             * ,也就是说这里需要调用RegistryProtocol的refer方法。但是RegistryProtocol被QosProtocolWrapper ProtocolFilterWrapper
+             * ProtocolListenerWrapper三个Wrapper类增强了。所以经过层层调用才会执行RegistryProtocol的refer方法
+             *
+             */
+
             invoker = protocolSPI.refer(interfaceClass, curUrl);
             if (!UrlUtils.isRegistry(curUrl)) {
                 List<Invoker<?>> invokers = new ArrayList<>();

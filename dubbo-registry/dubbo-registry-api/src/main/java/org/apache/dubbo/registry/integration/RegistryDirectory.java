@@ -130,19 +130,31 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
             return;
         }
 
+        /**
+         * 对不同类别的元数据进行分类
+         */
         Map<String, List<URL>> categoryUrls = urls.stream()
                 .filter(Objects::nonNull)
                 .filter(this::isValidCategory)
                 .filter(this::isNotCompatibleFor26x)
                 .collect(Collectors.groupingBy(this::judgeCategory));
 
+        /**
+         * 配置信息，比如服务降级信息
+         */
         List<URL> configuratorURLs = categoryUrls.getOrDefault(CONFIGURATORS_CATEGORY, Collections.emptyList());
         this.configurators = Configurator.toConfigurators(configuratorURLs).orElse(this.configurators);
 
+        /**
+         * 路由信息收集并保存
+         */
         List<URL> routerURLs = categoryUrls.getOrDefault(ROUTERS_CATEGORY, Collections.emptyList());
         toRouters(routerURLs).ifPresent(this::addRouters);
 
         // providers
+        /**
+         * 服务提供者和信息
+         */
         List<URL> providerURLs = categoryUrls.getOrDefault(PROVIDERS_CATEGORY, Collections.emptyList());
 
         // 3.x added for extend URL address
@@ -180,12 +192,16 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 
     /**
      * Convert the invokerURL list to the Invoker Map. The rules of the conversion are as follows:
+     * 将InvokerURL列表转为InvokerMap 转换规则如下
      * <ol>
      * <li> If URL has been converted to invoker, it is no longer re-referenced and obtained directly from the cache,
      * and notice that any parameter changes in the URL will be re-referenced.</li>
+     * 如果Url已经转换为调用者，就不再被重新引用，而是直接从缓存中获取，注意URL中的任何参数变化都会被重新引用
      * <li>If the incoming invoker list is not empty, it means that it is the latest invoker list.</li>
+     * 如果传入的调用者列表不为空，则表示他是最新的调用者列表
      * <li>If the list of incoming invokerUrl is empty, It means that the rule is only a override rule or a route
      * rule, which needs to be re-contrasted to decide whether to re-reference.</li>
+     * 如果传入的invokerURL列表为空，则表示该规则只是覆盖规则或路由规则，需要重新对比决定是否重新引用。
      * </ol>
      *
      * @param invokerUrls this parameter can't be null
@@ -228,6 +244,10 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                 oldUrlInvokerMap = new LinkedHashMap<>(Math.round(1 + localUrlInvokerMap.size() / DEFAULT_HASHMAP_LOAD_FACTOR));
                 localUrlInvokerMap.forEach(oldUrlInvokerMap::put);
             }
+            /**
+             * 根据获取的最新的服务提供者的URL地址，将其转为具体的invoke列表，也就是说每个提供者的URL会被转换为一个Invoker对象，
+             *
+             */
             Map<URL, Invoker<T>> newUrlInvokerMap = toInvokers(oldUrlInvokerMap, invokerUrls);// Translate url list to Invoker map
 
             /**
@@ -368,6 +388,10 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                         enabled = url.getParameter(ENABLED_KEY, true);
                     }
                     if (enabled) {
+                        /**
+                         * 这里调用Dubbo协议转换服务到Invoker
+                         * 这里protocol对象
+                         */
                         invoker = protocol.refer(serviceType, url);
                     }
                 } catch (Throwable t) {

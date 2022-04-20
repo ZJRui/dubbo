@@ -114,6 +114,9 @@ public abstract class AbstractClient extends AbstractEndpoint implements Client 
     }
 
     protected static ChannelHandler wrapChannelHandler(URL url, ChannelHandler handler) {
+        /**
+         * 在ChannelHandlers.wrap函数内会确定消费端Dubbo内部的线程池模型
+         */
         return ChannelHandlers.wrap(handler, url);
     }
 
