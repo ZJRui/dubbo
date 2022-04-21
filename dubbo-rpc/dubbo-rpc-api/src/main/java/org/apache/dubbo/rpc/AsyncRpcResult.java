@@ -76,6 +76,9 @@ public class AsyncRpcResult implements Result {
         RpcInvocation rpcInvocation = (RpcInvocation) invocation;
         if ((rpcInvocation.get(PROVIDER_ASYNC_KEY) != null || InvokeMode.SYNC != rpcInvocation.getInvokeMode()) && !future.isDone()) {
             async = true;
+            /**
+             * 为了避免其他调用修改上下文，这里进行拷贝
+             */
             this.storedContext = RpcContext.clearAndStoreContext();
         } else {
             async = false;

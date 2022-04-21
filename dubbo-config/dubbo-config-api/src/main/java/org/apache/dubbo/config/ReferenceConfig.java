@@ -395,6 +395,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         /**
          * 是否需要打开本地引用
          *
+         * 如果在消费端没有指定scope类型，则启动时会检查是否有导出的服务，如果有则自动开启本地引用。 也就是将协议类型改为injvm
+         *
+         *
          */
         if (shouldJvmRefer(referenceParameters)) {
             createInvokerForLocal(referenceParameters);
@@ -730,6 +733,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                 isJvmRefer = false;
             } else {
                 // by default, reference local service if there is
+                /**
+                 * isInjvmRefer方法会调用getExporter方法从InjvmProtocol的缓存中查看是否有本地暴露的服务
+                 */
                 isJvmRefer = InjvmProtocol.getInjvmProtocol(getScopeModel()).isInjvmRefer(tmpUrl);
             }
         } else {

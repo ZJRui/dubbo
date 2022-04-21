@@ -104,6 +104,9 @@ public class DubboInvoker<T> extends AbstractInvoker<T> {
             currentClient = clients[index.getAndIncrement() % clients.length];
         }
         try {
+            /**
+             * 是否为oneWay 也就是不需要响应结果的请求
+             */
             boolean isOneway = RpcUtils.isOneway(getUrl(), invocation);
             int timeout = calculateTimeout(invocation, methodName);
             invocation.setAttachment(TIMEOUT_KEY, timeout);
@@ -113,6 +116,37 @@ public class DubboInvoker<T> extends AbstractInvoker<T> {
                 return AsyncRpcResult.newDefaultAsyncResult(invocation);
             } else {
                 ExecutorService executor = getCallbackExecutor(getUrl(), inv);
+                /**
+                 *
+                 * 在DubboInovker中 使用如下内容发起请求
+                 *  CompletableFuture<AppResponse> appResponseFuture =
+                 *                         currentClient.request(inv, timeout, executor).thenApply(obj -> (AppResponse) obj);
+                 *
+                 * 异步请求，该调用不会阻塞，马上返回一个Future对象， 框孔二狗IP设在建瓯打牌 RpcContext中
+                 * 这里的currentClient
+                 *
+                 * DubboInvoker.invoke-->dubboInvoer.doInvoker-->ReferenceCountExchangeClinet.request -->HeaderExchangeClient.request
+                 * -->HeaderExchagneChannel
+                 *
+                 *当服务消费端业务线程发起请求后，在 HeaderExchangeChannel的request中年创建一个DefaultFuture对象,本质上是一个CompletableFuture，
+                 * 并设置到RpcContext中，然后在启动 IO线程发起请求后调用线程就返回了null结果； 当业务线程从RpcContext获取future对象并调用其get方法获取真实的响应结果后，
+                 * 当前线程会被阻塞。 当服务提供端把结果写会调用方法后，调用方线程模型中线程池里的线程会把结果写入DefaultFuture对象内的结果变量中。
+                 * 接着CompletableFuture的complete方法会unpark 激活被get阻塞的业务线程，业务线程从get方法返回结果响应。
+                 *
+                 * 这种实现异步调用的方式基于 从返回的future调用get方法，缺点是当业务线程调用get时会被阻塞， Dubbo提供了在future对象上设置
+                 * 回调函数的方式，让我们实现真正的异步调用。这种方式下 调用方将结果写入Future，然后对回调函数进行回调。这个过程不需要业务线程干预，实现了真正的异步调用。
+                 *
+                 * CompletableFuture<String>  future=RpcContext.getContext.getCompletableFuture();
+                 * future.whenComplete((v,t)->{
+                 *     if (null!=t){
+                 *       t.printStackTrace()
+                 *     }elese{
+                 *         sout(v)
+                 *     }
+                 * })
+                 *
+                 *
+                 */
                 CompletableFuture<AppResponse> appResponseFuture =
                         currentClient.request(inv, timeout, executor).thenApply(obj -> (AppResponse) obj);
                 // save for 2.6.x compatibility, for example, TraceFilter in Zipkin uses com.alibaba.xxx.FutureAdapter

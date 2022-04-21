@@ -83,11 +83,29 @@ public class InjvmProtocol extends AbstractProtocol {
 
     @Override
     public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        /**
+         * export 返回一个InjvmExporter对象 ，并将AbstractProtocol的exporterMap对象传递给InjvmExporter
+         * 同时在InjvmExporter的构造器中 会将自身放入到 exporterMap中
+         */
         return new InjvmExporter<T>(invoker, invoker.getUrl().getServiceKey(), exporterMap);
     }
 
     @Override
     public <T> Invoker<T> protocolBindingRefer(Class<T> serviceType, URL url) throws RpcException {
+        /**
+         * refer 方法中返回了一个InjvmInvoker对象并且保存了InjvmProtocol管理的exporterMap对象（其中保存了导出的本地服务）
+         *
+         * 当服务消费者 通过refer方法得到 一个InjvmInvoker对象 后，这个InjvmInvoker又被 ProxyFactory进行代理生成代理对象。
+         * 然后当消费者执行接口方法 就会被拦截执行 InjvmInvoker的invoke方法， 在InjvmInvoker的invoke中执行器doInvoker方法
+         *
+         * 在doInvoker中 从expoterMap中根据 url得到 InjvmExporter实例，然后 InjvmExporter内部本身又持有AbstractProxyInvoker
+         *
+         * 这个AbstractProxyInvoker是 在服务提供者端  InjvmProtocol的getInvoker时返回的，然后这个AbstractProxyInvoker 在exporter方法中被放置到了 InjvmExporter中。
+         *
+         * AbstractProxyInvoker本身又 持有了 服务提供者的Wrapper对象，从而通过wrapper对象 调用了服务实现类的方法。
+         *
+         *
+         */
         return new InjvmInvoker<T>(serviceType, url, url.getServiceKey(), exporterMap);
     }
 
@@ -104,7 +122,14 @@ public class InjvmProtocol extends AbstractProtocol {
         } else if (url.getParameter(GENERIC_KEY, false)) {
             // generic invocation is not local reference
             return false;
-        } else if (getExporter(exporterMap, url) != null) {
+        } else
+        /**
+         * 调用getExporter方法 从InjvmProtocol的缓存中查看是否有本地暴露的服务。
+         *  这个exporterMap是从 父类 AbstractProtocol 中继承的。
+         *
+         *  InjvmExporter的构造器执行的时候会将自身注册到exporterMap中
+         */
+            if (getExporter(exporterMap, url) != null) {
             // Broadcast cluster means that multiple machines will be called,
             // which is not converted to injvm protocol at this time.
             if (BROADCAST_CLUSTER.equalsIgnoreCase(url.getParameter(CLUSTER_KEY))) {

@@ -817,6 +817,10 @@ public class RpcContext {
         private final RpcContextAttachment serverLocal;
 
         public RestoreContext() {
+            /**
+             * 为了避免其他调用修改上下文内容，这里拷贝保存
+             *
+             */
             serviceContext = getServiceContext().copyOf(false);
             clientAttachment = getClientAttachment().copyOf(false);
             serverAttachment = getServerAttachment().copyOf(false);
