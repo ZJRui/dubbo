@@ -512,6 +512,11 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
         url = getRegistryUrl(url);
+        /**
+         * 获取注册中心实例
+         * 一般返回的是ZookeeperRegistry
+         *
+         */
         Registry registry = getRegistry(url);
         if (RegistryService.class.equals(type)) {
             return proxyFactory.getInvoker((T) registry, type, url);
@@ -578,6 +583,9 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
      * @return The @param MigrationInvoker passed in
      */
     protected <T> Invoker<T> interceptInvoker(ClusterInvoker<T> invoker, URL url, URL consumerUrl) {
+        /**
+         * 这里会通过SPI加载 MigrationRuleListener
+         */
         List<RegistryProtocolListener> listeners = findRegistryProtocolListeners(url);
         if (CollectionUtils.isEmpty(listeners)) {
             return invoker;
@@ -615,11 +623,17 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
 
     public <T> ClusterInvoker<T> getInvoker(Cluster cluster, Registry registry, Class<T> type, URL url) {
         // FIXME, this method is currently not used, create the right registry before enable.
+        /**
+         * 创建RegistryDirectory
+         */
         DynamicDirectory<T> directory = new RegistryDirectory<>(type, url);
         return doCreateInvoker(directory, cluster, registry, type);
     }
 
     protected <T> ClusterInvoker<T> doCreateInvoker(DynamicDirectory<T> directory, Cluster cluster, Registry registry, Class<T> type) {
+        /**
+         * 设置注册中心和协议
+         */
         directory.setRegistry(registry);
         directory.setProtocol(protocol);
         // all attributes of REFER_KEY
@@ -652,7 +666,27 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
 
         directory.subscribe(toSubscribeUrl(urlToRegistry));
 
-        return (ClusterInvoker<T>) cluster.join(directory, true);//调用扩展接口Cluster的适配器的join方法，根据参数选择配置的集群容错策略
+        //调用扩展接口Cluster的适配器的join方法，根据参数选择配置的集群容错策略
+        /**
+         * 默认情况下 Cluster的扩展接口实现为FailoverCluster，所以这里调用FailoverCluster的join方法、
+         *
+         *
+         * Dubbo对Cluster扩展接口实现类使用了Wrapper类MockClusterWrapper进行了增强，因此实际上的调用时序是
+         * ClusterAdaptive---->MockClusterWrapper--->FailoverCluster
+         *
+         * 其中FailOverCluster的join方法调用了doJoin，doJoin方法中返回了FailoverClusterInvoker
+         * 但还这个FailOverClusterInvoker  实际上是返回给了MockClusterWrapper，在MockClusterWrapper的join方法中
+         * 对这个FailOverClusterInvoker进行包装成了MockClusterInvoker实例。所以整个调用链最终返回的是MockClusterInvoker对象。
+         *
+         * 然后针对这个MockClusterInvoker对象获取 他的代理，实现Invoker到客户端接口的转换，具体在 ReferenceConfig的createProxy方法中
+         * 首先  createInvokerForRemote 得到Invoker，然后  proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
+         * 默认使用JavassistProxyFactory的getProxy方法。
+         *
+         *
+         *
+         *
+         */
+        return (ClusterInvoker<T>) cluster.join(directory, true);
 
     }
 

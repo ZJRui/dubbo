@@ -54,6 +54,9 @@ public class MigrationRuleHandler<T> {
             logger.error("Failed to get step and threshold info from rule: " + rule, e);
         }
 
+        /**
+         * 这里执行refreshInvoker触发 invoker的创建
+         */
         if (refreshInvoker(step, threshold, rule)) {
             // refresh success, update rule
             setMigrationRule(rule);

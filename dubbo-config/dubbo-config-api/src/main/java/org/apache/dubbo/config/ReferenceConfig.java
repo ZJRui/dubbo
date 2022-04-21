@@ -427,6 +427,56 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         consumerUrl = consumerUrl.setServiceModel(consumerModel);
         MetadataUtils.publishServiceDefinition(consumerUrl, consumerModel.getServiceModel(), getApplicationModel());
 
+        /**
+         * ==============================
+         *
+         * 首先ReferenceConfig的get方法会触发 创建一个接口的代理对象，在ReferenceConfig的crateProxy方法中首先是需要创建一个Invoker对象
+         * ReferenceConfig的createInvokerFromRemote方法内部会执行  invoker = protocolSPI.refer(interfaceClass, curUrl);
+         * 这个ProtocolSPI显然是Protocol$Adaptive 然后因为注册协议是registry:// 因此会执行RegistryProtocol的refer方法。
+         * 在RegistryProtocol的refer方法中会触发 RegistryProtocol的getInvoker 方法执行 .
+         * 在getInvoker方法中 首先创建一个 RegistryDirectory对象，这个RegistryDirectory内部会维护并创建Invoker对象。
+         *
+         * RegistryDirectory对象创建完之后会执行 其subscribe方法 subscribe方法中使用Zookeeperregistry.subscribe(url, this);
+         * 然后就会执行 ZookeeperRegistry的doSubscribe 在这个doSubscribe方法中会使用zkclient连接Zookeeper获取服务提供者的url信息，然后执行
+         * ZookeeperRegistry的notify(url, listener, urls);  在这个notify方法中会遍历每一个 Listener，执行Listener的notify方法。
+         * 而RegistryDirectory又是一个listener，因此又进入了RegistryDirectory的notify方法
+         * 在RegistryDirectory的notify方法中会执行 toInvokers方法 ，toInvoker方法中使用 RegistryDirectory对象的成员属性protocol执行：
+         *  invoker = protocol.refer(serviceType, url);
+         *  而这个Protocol就是DubboProtocol。 因此RegistryDirectory中得到了 DubboProtocol的refer方法中返回读DubboInvoker。而且DubboProtocol在
+         *  创建DubboInvoker的时候会启动NettyClient 连接到服务提供者NettyServer。
+         *
+         *  在上面有一个注意点： 实际上 RegistryDirectory创建Invoker的时候不是直接使用DubboProtocol的refer，而是先使用了ProtocolFilterWrapper的refer
+         *  在ProtocolFilterWrapper的refer方法中 对DubboProtocol的refer返回的DubboInvoker对象 进行了包装，构建成了一个调用链。ProtocolFilterWrapper
+         *  的refer方法返回的是CallbackRegistrationInvoker调用链对象，这个调用链对象同时也是一个Invoker。因此RegistryDirectory内部维护的InvokerList内部的
+         *  Invoker对象实际上一个个调用链CallbackRegistrationInvoker，调用链的最末尾就是DubboInvoker。
+         *
+         *  至此程序完成了RegistryDirectory的subscribe方法，因此回溯到 RegistryProtocol的doCreateInvoker方法，在doCreateInvoker方法中
+         *  先执行了RegistryDirectory的subscribe方法使得在RegistryDirectory内部创建了Invoker。然后又针对 RegistryDirectory对象执行了
+         *  cluster.join(directory, true);
+         *
+         *  其中这个Cluster是SPI扩展接口，实际上的调用时序是ClusterAdaptive.join---->MockClusterWrapper.join--->FailoverCluster.join
+         *  我们查看FailOverCluster的join方法，可以看到其doJoin方法返回了一个 FailoverClusterInvoker, 而且这个FailOverClusterInvoker对象
+         *  持有RegistryDirectory对象，也就等价于持有服务提供者Invoker。  FailOverCluster的join方法返回的FailOverClusterInvoker对象又被交给
+         *  MockClusterWrapper，他的join方法中将FailOverClusterInvoker包装成MockClusterInvoker 。因此 最终 这个mockClusterInvoker 作为
+         *  RegistryProtocol的refer方法的返回值， 也就是说ReferenceConfig的createProxy的第一步invoker = protocolSPI.refer(interfaceClass, curUrl);
+         *  得到了一个MockClusterInvoker。
+         *
+         *
+         *
+         *  然后ReferenceConfig的createProxy的第二步就是针对 上一步返回的Invoker对象 创建一个业务接口的代理对象 ，实现将Invoker转为业务接口代理对象
+         *  这个转换是 proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic)); 这会执行JavassistProxyFactory的getProxy方法
+         *  返回一个代理对象，getProxy中指定了拦截器为 InvokerInvocationHandler ，在创建InvokerInvocationHandler对象的时候我们将 上面返回的MockClusterInvoker交给了拦截器
+         *
+         *  因此当接口方法执行的时候会被拦截到执行InvokerInvocationHandler的invoke方法，在拦截器的在invoke方法内部会执行MockClusterInvoker的invoke,调用顺序如下：
+         *
+         *  InvokerInvocationHandler.invoke--->MockClusterInvocker.invoke-->FailoverClusterInvoker.invoke  FailOverClusterInvoker内部有RegistryDirectory，他会
+         *  负载均衡选择一个Invoker进行执行，而每一个Invoker本质上是ProtocolFilterWrapper返回的调用链对象--->ProtocolFIlterWrapper的refer返回的CallbackRegistrationInvoker.invoker
+         *  执行调用链--->DubboInvoker.invoke.doInvoke 将请求发送给服务提供者的NettyServer
+         *
+         */
+
+
+
         // create service proxy
         /**
          * 创建服务代理对象。
@@ -528,6 +578,15 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
              * 在Protocol$Adaptive的refer方法内部，当我们设置了服务注册中心后，可以发现当前协议类型为registry
              * ,也就是说这里需要调用RegistryProtocol的refer方法。但是RegistryProtocol被QosProtocolWrapper ProtocolFilterWrapper
              * ProtocolListenerWrapper三个Wrapper类增强了。所以经过层层调用才会执行RegistryProtocol的refer方法
+             *
+             * 跟进去的调用流程是：
+             *
+             * ProtocolListenerWrapper.refer方法 --------> ProtocolFilterWrapper.refer --------> QosProtocolWrapper.refer ----
+             * ----> QosProtocolWrapper.startQosServer(url); --------> RegistryProtocol.refer --------> RegistryProtocol.doRefer
+             *
+             * --------> MockClusterWrapper.join ------> FailoverCluster.join ------> ProviderConsumerRegTable.registerConsumer
+             *
+             *
              *
              */
 

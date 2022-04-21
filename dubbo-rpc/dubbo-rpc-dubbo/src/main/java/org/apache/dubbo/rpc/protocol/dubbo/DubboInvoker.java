@@ -86,11 +86,17 @@ public class DubboInvoker<T> extends AbstractInvoker<T> {
 
     @Override
     protected Result doInvoke(final Invocation invocation) throws Throwable {
+        /**
+         * 设置附加属性
+         */
         RpcInvocation inv = (RpcInvocation) invocation;
         final String methodName = RpcUtils.getMethodName(invocation);
         inv.setAttachment(PATH_KEY, getUrl().getPath());
         inv.setAttachment(VERSION_KEY, version);
 
+        /**
+         * 获取远程调用client
+         */
         ExchangeClient currentClient;
         if (clients.length == 1) {
             currentClient = clients[0];

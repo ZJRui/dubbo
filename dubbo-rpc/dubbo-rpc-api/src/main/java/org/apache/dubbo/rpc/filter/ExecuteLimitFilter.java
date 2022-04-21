@@ -40,6 +40,9 @@ import static org.apache.dubbo.rpc.Constants.EXECUTES_KEY;
 @Activate(group = CommonConstants.PROVIDER, value = EXECUTES_KEY)
 public class ExecuteLimitFilter implements Filter, Filter.Listener {
 
+    /**
+     * 用来控制服务提供方最大并发处理量。
+     */
     private static final String EXECUTE_LIMIT_FILTER_START_TIME = "execute_limit_filter_start_time";
 
     @Override

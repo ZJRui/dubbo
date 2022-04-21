@@ -43,6 +43,9 @@ import static org.apache.dubbo.rpc.Constants.ACTIVES_KEY;
  */
 @Activate(group = CONSUMER, value = ACTIVES_KEY)
 public class ActiveLimitFilter implements Filter, Filter.Listener {
+    /**
+     * 用来控制消费端最大并发调用量
+     */
 
     private static final String ACTIVE_LIMIT_FILTER_START_TIME = "active_limit_filter_start_time";
 

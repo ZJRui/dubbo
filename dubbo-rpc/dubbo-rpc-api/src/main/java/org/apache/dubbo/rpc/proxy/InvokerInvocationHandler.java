@@ -47,6 +47,28 @@ public class InvokerInvocationHandler implements InvocationHandler {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+
+        /**
+         * InvokerInvocationHandler 为具体拦截器
+         * 在ReferenceConfig的createProxy方法中，首先 会通过createInvokerForRemote创建一个invoker
+         * 然后使用proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic)); 为这个invoker创建一个代理对象。
+         *
+         * getProxy方法中的第二个参数是业务接口class，然后创建一个这个接口的代理实现类，然后指定InvokerInvocationHandler作为拦截器
+         * 然后getProxy的第一个参数invoker为真实被代理的原始目标对象。
+         * 当执行代理对象的接口方法的时候 会被InvokerInvocationHandler拦截，从而执行InvocationHandler的 invoke方法。
+         * 在invoke方法中 将调用的方法等信息封装成一个Invocation，然后执行 Dubbo的Invoker对象的invoke方法。
+         * 最终执行DubboInvoker的invoke 将这个调用信息发送给服务提供者。
+         *
+         * =========================
+         * Dubbo服务消费端一次远程调用过程时序
+         *
+         * InvokerInvocationHandler.invoker--->MockClusterInvoker.invoke----->FailoverClusterInvoker.doInvoke.select.doSelect.invoke
+         * ------> InvokeDelegete.invoke ---->ProtocolFilterWrapper.invoke---> 进入Filter责任链  ActiveLimitFilter.invoke--->dubboInvoker.doInver
+         *
+         *
+         *
+         */
+
         if (method.getDeclaringClass() == Object.class) {
             return method.invoke(invoker, args);
         }

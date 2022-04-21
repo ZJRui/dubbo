@@ -88,6 +88,8 @@ public @interface Activate {
      *
      * Ascending order, smaller values will be in the front o the list.
      *
+     * 低的排序优先级高
+     *
      * @return absolute ordering info
      */
     int order() default 0;

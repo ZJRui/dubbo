@@ -90,6 +90,9 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
     /**
      * Map<url, Invoker> cache service url to invoker mapping.
      * The initial value is null and the midway may be assigned to null, please use the local variable reference
+     *
+     * 在RegistryDirectory中维护了所有服务者的invoker列表，消费端发起远程调用时就根据集群容错和负载均衡算法以及
+     * 路由规则从invoker列表中选择一个进行调用，当服务提供者宕机的时候，Zookeeper会通知更新这个invoker列表
      */
     protected volatile Map<URL, Invoker<T>> urlInvokerMap;
 

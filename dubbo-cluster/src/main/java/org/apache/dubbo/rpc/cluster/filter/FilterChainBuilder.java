@@ -190,6 +190,23 @@ public interface FilterChainBuilder {
 
         @Override
         public Result invoke(Invocation invocation) throws RpcException {
+            /**
+             * 这里创建了一个调用链对象CallbackRegistrationInvoker，这个调用链对象持有  last=A_CopyOfFilterChainNode.
+             * 在这个A_CopyOfFilterChainNode对象中，他的next属性是B_CopyOfFilterChainNode.,他的filter属性是 AFilter
+             *
+             * 在A_CopyOfFilterChainNode的invoke方法中 会执行AFilter的invoker方法 filter.invoke(nextNode, invocation);
+             * 传递nextNode是B_CopyOfFilterChainNode
+             * AFilter 的invoke方法内部会 使用接收到的 B_CopyOfFilterChainNode 执行其invoke方法。
+             * B_CopyOfFilterChainNode 的invoke内部会执行 Bfilter.invoke(nextNode,invocation)
+             * 这里传递的nextNode就是C_CopyOfFilterChianNode
+             * 从而时间 触发整个调用链的执行。
+             * 在D_CopyOfFilterChainNode内部 持有的NextNode就是DubboInvoker，Filter就是DFilter。
+             * 因此在D_CopyOfFilterChainNode的invoke方法中会执行DFIlter.invoke(dubbInvoker,invocation)
+             * 在DFilter内部最终会执行dubboInvoker的invoke方法。
+             *
+             * 这里触发调用链的执行， filterInvoker就是D_CopyofFilterChainNode，具体参考 org.apache.dubbo.rpc.cluster.filter.DefaultFilterChainBuilder#buildInvokerChain(org.apache.dubbo.rpc.Invoker, java.lang.String, java.lang.String)
+             *
+             */
             Result asyncResult = filterInvoker.invoke(invocation);
             asyncResult.whenCompleteWithContext((r, t) -> {
                 for (int i = filters.size() - 1; i >= 0; i--) {
@@ -197,6 +214,9 @@ public interface FilterChainBuilder {
                     try {
                         InvocationProfilerUtils.releaseDetailProfiler(invocation);
                         if (filter instanceof ListenableFilter) {
+                            /**
+                             * 当调用链执行完成后对每个Filter的listener执行器监听
+                             */
                             ListenableFilter listenableFilter = ((ListenableFilter) filter);
                             Filter.Listener listener = listenableFilter.listener(invocation);
                             try {

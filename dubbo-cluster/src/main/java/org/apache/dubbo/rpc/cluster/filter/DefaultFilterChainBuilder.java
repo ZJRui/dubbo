@@ -73,6 +73,7 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
         if (!CollectionUtils.isEmpty(filters)) {
             /**
              * 假如我们有四个 ABCD Filter，
+             *
              * 首先取出DFilter，此时last=originalInvoker ，这个OriginInvoker就是DubboProtocol中返回的DubboInvoker
              * 然后创建一个CopyOfFilterChainNode 这个Node本质上是一个Invoker。
              * 这个Invoker的next属性是DubboProtocol，Filter属性是D
@@ -89,7 +90,7 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
                 last = new CopyOfFilterChainNode<>(originalInvoker, next, filter);
             }
             /**
-             * 这里创建了一个调用链对象，这个调用链对象持有  last=A_CopyOfFilterChainNode.
+             * 这里创建了一个调用链对象CallbackRegistrationInvoker，这个调用链对象持有  last=A_CopyOfFilterChainNode.
              * 在这个A_CopyOfFilterChainNode对象中，他的next属性是B_CopyOfFilterChainNode.,他的filter属性是 AFilter
              *
              * 在A_CopyOfFilterChainNode的invoke方法中 会执行AFilter的invoker方法 filter.invoke(nextNode, invocation);
@@ -101,6 +102,10 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
              * 在D_CopyOfFilterChainNode内部 持有的NextNode就是DubboInvoker，Filter就是DFilter。
              * 因此在D_CopyOfFilterChainNode的invoke方法中会执行DFIlter.invoke(dubbInvoker,invocation)
              * 在DFilter内部最终会执行dubboInvoker的invoke方法。
+             *
+             * 我们会发现 Filter的invoke方法 在执行完Filter的逻辑的最后总是会执行 filter的invoke方法接收到的第一个参数Invoker的invoke方法
+             * 这个第一个参数Invoker就是 CopyOfFilterChainNode对象。
+             *
              *
              */
             return new CallbackRegistrationInvoker<>(last, filters);

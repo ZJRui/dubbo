@@ -35,6 +35,13 @@ public class MockClusterWrapper implements Cluster {
 
     @Override
     public <T> Invoker<T> join(Directory<T> directory, boolean buildFilterChain) throws RpcException {
+        /**
+         * this.cluster 是FailoverCluster，他的join方法返回 FailoverClusterInvoker
+         * 这里MockClusterWrapper 将FailoverClusterInvoker包装成了MockClusterInvoker失礼了。 所以整个调用链返回的是MockClusterInvoker
+         * 也就是 org.apache.dubbo.registry.integration.RegistryProtocol#doCreateInvoker(org.apache.dubbo.registry.integration.DynamicDirectory, org.apache.dubbo.rpc.cluster.Cluster, org.apache.dubbo.registry.Registry, java.lang.Class)
+         *
+         *
+         */
         return new MockClusterInvoker<T>(directory,
                 this.cluster.join(directory, buildFilterChain));
     }

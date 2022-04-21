@@ -30,6 +30,15 @@ public class FailoverCluster extends AbstractCluster {
 
     @Override
     public <T> AbstractClusterInvoker<T> doJoin(Directory<T> directory) throws RpcException {
+
+        /**
+         * 把directory对象包裹到了 FailoverClusterInvoker中
+         * Directory是RegistryDirectory其内部维护了所有服务提供者的invoker列表。 FailoverCluster就是集群容错策略。
+         *
+         * Dubbo对Cluster扩展接口实现类使用了Wrapper类MockClusterWrapper进行增强 实际上的调用是
+         * Cluster$Adaptive---->MockClusterWrapper--->FailbackCluster
+         *
+         */
         return new FailoverClusterInvoker<>(directory);
     }
 
