@@ -49,7 +49,14 @@ public class ExecuteLimitFilter implements Filter, Filter.Listener {
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
         URL url = invoker.getUrl();
         String methodName = invocation.getMethodName();
+        /**
+         * serviceConfig.setExecutes（10）
+         * 获取设置的executes的值默认为0 和最大可用并发数
+         */
         int max = url.getMethodParameter(methodName, EXECUTES_KEY, 0);
+        /**
+         * 判断是否超过并发限制
+         */
         if (!RpcStatus.beginCount(url, methodName, max)) {
             throw new RpcException(RpcException.LIMIT_EXCEEDED_EXCEPTION,
                     "Failed to invoke method " + invocation.getMethodName() + " in provider " +

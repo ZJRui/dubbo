@@ -322,6 +322,20 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
     public Result invoke(final Invocation invocation) throws RpcException {
         checkWhetherDestroyed();
 
+        /**
+         * 从上下文中获取附加属性并设置到RpcInvocation对象中
+         *  @Disabled("RpcContext attachments will be set to Invocation twice, first in ConsumerContextFilter, second AbstractInvoker")
+         *
+         *  服务的消费端 启动后  最终会到达默认的 集群容错策略FailOverClusterInvoker的invoke方法。
+         *  FailOverClusterInvoker的invoke继承自AbstractClusterInvoker的invoke方法
+         *  在这个方法中将context中的attachment 添加到Invocation中。
+         *  最终发送给服务提供方。（这个是旧版本的实现）
+         *
+         *
+         *  在新版的 实现中 这个工作 被放置到  DubboInvoker的父类 AbstractInvoker的invoke方法中的 prepareInvocation方法中
+         *  DubboInvoker是消费端 通过 协议的refer方法得到的Invoker对象。
+         *
+         */
         // binding attachments into invocation.
 //        Map<String, Object> contextAttachments = RpcContext.getClientAttachment().getObjectAttachments();
 //        if (contextAttachments != null && contextAttachments.size() != 0) {

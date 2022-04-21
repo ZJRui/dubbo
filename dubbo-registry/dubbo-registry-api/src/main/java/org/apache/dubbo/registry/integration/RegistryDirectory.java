@@ -168,6 +168,9 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                 providerURLs = addressListener.notify(providerURLs, getConsumerUrl(),this);
             }
         }
+        /**
+         * 从Zookeeper返回的服务提供者的信息里获取对应的路由的规则
+         */
         refreshOverrideAndInvoker(providerURLs);
     }
 
@@ -212,6 +215,10 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
     private void refreshInvoker(List<URL> invokerUrls) {
         Assert.notNull(invokerUrls, "invokerUrls should not be null");
 
+        /**
+         * 只有一个服务提供者时
+         *
+         */
         if (invokerUrls.size() == 1
                 && invokerUrls.get(0) != null
                 && EMPTY_PROTOCOL.equals(invokerUrls.get(0).getProtocol())) {
@@ -219,6 +226,10 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
             routerChain.setInvokers(BitList.emptyList());
             destroyAllInvokers(); // Close all invokers
         } else {
+            /**
+             * 锁哥服务提供者时
+             *
+             */
             this.forbidden = false; // Allow to access
             
             if (invokerUrls == Collections.<URL>emptyList()) {
@@ -270,10 +281,23 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
             List<Invoker<T>> newInvokers = Collections.unmodifiableList(new ArrayList<>(newUrlInvokerMap.values()));
             this.setInvokers(multiGroup ? new BitList<>(toMergeInvokerList(newInvokers)) : new BitList<>(newInvokers));
             // pre-route and build cache
+            /**
+             * 设置newInvokers到routerChain
+             * RouterChain中保存了可用服务提供者对应的invokers列表和路由规则信息，当服务消费方的集群容错策略要获取
+             * 可用服务提供者和对应的 invoker列表时，会调用RouterChian的route方法，其内部根据路由规则信息和invokers列表
+             * 来提供服务
+             *
+             * routerChain链什么时候被创建？ RouterChain是在小飞度阿奴启动过程中通过RegistryProtocol的doRefer方法调用RegistryDirectory的buildRouterChain
+             * 方法创建的。
+             *
+             */
             routerChain.setInvokers(this.getInvokers());
             this.urlInvokerMap = newUrlInvokerMap;
 
             try {
+                /**
+                 * 关闭无用的invokers
+                 */
                 destroyUnusedInvokers(oldUrlInvokerMap, newUrlInvokerMap); // Close the unused Invoker
             } catch (Exception e) {
                 logger.warn("destroyUnusedInvokers error. ", e);

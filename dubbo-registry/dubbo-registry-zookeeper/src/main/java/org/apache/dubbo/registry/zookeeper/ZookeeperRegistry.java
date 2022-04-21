@@ -182,6 +182,10 @@ public class ZookeeperRegistry extends CacheableFailbackRegistry {
                             ((RegistryChildListenerImpl) zkListener).setLatch(latch);
                         }
                         zkClient.create(path, false);
+                        /**
+                         *
+                         * 添加Zookeeper事件监听
+                         */
                         List<String> children = zkClient.addChildListener(path, zkListener);
                         if (children != null) {
                             urls.addAll(toUrlsWithEmpty(url, path, children));

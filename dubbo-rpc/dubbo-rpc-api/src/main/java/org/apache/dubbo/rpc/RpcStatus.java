@@ -32,14 +32,26 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class RpcStatus {
 
+    /**
+     * RPCStatus 如何统计调用状态的
+     *
+     * key为具体的方法，value为RpcStatus对象
+     */
     private static final ConcurrentMap<String, RpcStatus> SERVICE_STATISTICS = new ConcurrentHashMap<String,
             RpcStatus>();
 
+    /**
+     * 缓存key为接口类，value为map 表示该服务接口中所有方法的一个缓存，
+     *
+     */
     private static final ConcurrentMap<String, ConcurrentMap<String, RpcStatus>> METHOD_STATISTICS =
             new ConcurrentHashMap<String, ConcurrentMap<String, RpcStatus>>();
 
     private final ConcurrentMap<String, Object> values = new ConcurrentHashMap<String, Object>();
 
+    /**
+     * 当前激活并发数
+     */
     private final AtomicInteger active = new AtomicInteger();
     private final AtomicLong total = new AtomicLong();
     private final AtomicInteger failed = new AtomicInteger();
@@ -53,6 +65,7 @@ public class RpcStatus {
     }
 
     /**
+     *
      * @param url
      * @return status
      */
@@ -92,6 +105,9 @@ public class RpcStatus {
     }
 
     public static void beginCount(URL url, String methodName) {
+        /**
+         * 递增方法对应的激活并发数
+         */
         beginCount(url, methodName, Integer.MAX_VALUE);
     }
 
@@ -100,11 +116,25 @@ public class RpcStatus {
      */
     public static boolean beginCount(URL url, String methodName, int max) {
         max = (max <= 0) ? Integer.MAX_VALUE : max;
+
         RpcStatus appStatus = getStatus(url);
+        /**
+         * 获取方法对应的RpcStatus
+         */
         RpcStatus methodStatus = getStatus(url, methodName);
+        /**
+         *
+         * 原子性递增方法对应激活并发数，若超过最大限制则返回false，否则返回true
+         *
+         * 如果beginCount返回了false，则让当前线程挂起timeout时间，然后当前线程会在timeout时间后再被唤醒。
+         * 或者当其他线程调用了count的notifyAll方法被唤醒。
+         * 如果超过timeout时间还没被唤醒，则当前线程会被自动唤醒然后抛出RPCException异常，也就是说远程调用还没达到服务提供方
+         * 调用方就抛出异常结束了。
+         */
         if (methodStatus.active.get() == Integer.MAX_VALUE) {
             return false;
         }
+
         for (int i; ; ) {
             i = methodStatus.active.get();
 
@@ -128,6 +158,9 @@ public class RpcStatus {
      * @param succeeded
      */
     public static void endCount(URL url, String methodName, long elapsed, boolean succeeded) {
+        /**
+         * 原子性递减方法对应的激活并发数
+         */
         endCount(getStatus(url), elapsed, succeeded);
         endCount(getStatus(url, methodName), elapsed, succeeded);
     }

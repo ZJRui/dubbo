@@ -176,6 +176,32 @@ public abstract class AbstractInvoker<T> implements Invoker<T> {
         RpcInvocation invocation = (RpcInvocation) inv;
 
         // prepare rpc invocation
+        /**
+         * 这里会执行将 attachment设置到 Invocation中
+         *
+         *  从上下文中获取附加属性并设置到RpcInvocation对象中
+         * RpcContext attachments will be set to Invocation twice, first in ConsumerContextFilter, second AbstractInvoker
+         *
+         *  服务的消费端 启动后  最终会到达默认的 集群容错策略FailOverClusterInvoker的invoke方法。
+         *  FailOverClusterInvoker的invoke继承自AbstractClusterInvoker的invoke方法
+         *  在这个方法中将context中的attachment 添加到Invocation中。
+         *  最终发送给服务提供方。（这个是旧版本的实现）
+         *
+         *
+         *  在新版的 实现中 这个工作 被放置到  DubboInvoker的父类 AbstractInvoker的invoke方法中的 prepareInvocation方法中
+         *  DubboInvoker是消费端 通过 协议的refer方法得到的Invoker对象。
+         *
+         *  服务调用方可以通过RpcContext.getContext.setAttachment方法设置属性附加键值对，这个键值对被放置到url中
+         *  在org.apache.dubbo.rpc.protocol.AbstractInvoker#AbstractInvoker(java.lang.Class, org.apache.dubbo.common.URL, java.lang.String[])
+         *  构造器中转换成一个Map。
+         *  在此处将这个map添加到 RpcInvocation对象中。
+         *
+         *
+         *  服务消费端什么时候会把里面设置的值给清除掉呢？ 是在org.apache.dubbo.rpc.cluster.filter.support.ConsumerContextFilter#onResponse
+         *
+         *
+         *
+         */
         prepareInvocation(invocation);
 
         // do invoke rpc invocation and return async result

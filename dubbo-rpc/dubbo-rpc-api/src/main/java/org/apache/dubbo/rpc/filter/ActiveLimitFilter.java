@@ -51,14 +51,31 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        /**
+         * 服务消费端，进行并发控制的是ProtocolFilterWrapper类中创建的Filter链中的ActiveLimitFilter
+         *
+         * 获取url和调用的方法名称
+         */
         URL url = invoker.getUrl();
         String methodName = invocation.getMethodName();
+        /**
+         * 获取设置的actives的值，默认为0，和最大可用并发数
+         */
         int max = invoker.getUrl().getMethodParameter(methodName, ACTIVES_KEY, 0);
+        /**
+         * 根据url和方法名获取对应的状态对象
+         */
         final RpcStatus rpcStatus = RpcStatus.getStatus(invoker.getUrl(), invocation.getMethodName());
+        /**
+         * 判断是否是超过并发限制
+         */
         if (!RpcStatus.beginCount(url, methodName, max)) {
             long timeout = invoker.getUrl().getMethodParameter(invocation.getMethodName(), TIMEOUT_KEY, 0);
             long start = System.currentTimeMillis();
             long remain = timeout;
+            /**
+             * 超过并发限制则阻塞当前线程timeout时间
+             */
             synchronized (rpcStatus) {
                 while (!RpcStatus.beginCount(url, methodName, max)) {
                     try {
@@ -68,6 +85,9 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
                     }
                     long elapsed = System.currentTimeMillis() - start;
                     remain = timeout - elapsed;
+                    /**
+                     * 超时还没唤醒则抛出异常
+                     */
                     if (remain <= 0) {
                         throw new RpcException(RpcException.LIMIT_EXCEEDED_EXCEPTION,
                                 "Waiting concurrent invoke timeout in client-side for service:  " +
@@ -79,6 +99,10 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
             }
         }
 
+        /**
+         * 到这里说明激活并发数没达到限制，则继续Filter链的调用。正常发起远程调用
+         *
+         */
         invocation.put(ACTIVE_LIMIT_FILTER_START_TIME, System.currentTimeMillis());
 
         return invoker.invoke(invocation);
@@ -90,6 +114,9 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
         URL url = invoker.getUrl();
         int max = invoker.getUrl().getMethodParameter(methodName, ACTIVES_KEY, 0);
 
+        /**
+         * 远程调用完成后 ，当前激活并发数减去1，并通过notifyAll方法激活所有挂起线程。
+         */
         RpcStatus.endCount(url, methodName, getElapsed(invocation), true);
         notifyFinish(RpcStatus.getStatus(url, methodName), max);
     }

@@ -64,6 +64,10 @@ public class BroadcastClusterInvoker<T> extends AbstractClusterInvoker<T> {
 
         int failThresholdIndex = invokers.size() * broadcastFailPercent / MAX_BROADCAST_FAIL_PERCENT;
         int failIndex = 0;
+        /**
+         * 使用循环，轮询每个机器进行调用，其中result为最后一个机器的执行结果
+         * 广播调用返回给调用方的result 是最后一次远程调用返回的结果
+         */
         for (Invoker<T> invoker : invokers) {
             try {
                 result = invokeWithContext(invoker, invocation);

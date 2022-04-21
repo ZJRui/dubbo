@@ -53,6 +53,9 @@ public class RouterChain<T> {
 
     /**
      * full list of addresses from registry, classified by method name.
+     * RouterChain中保存了可用服务提供者对应的invokers列表和路由规则信息，当服务消费方的集群容错策略要获取
+     * 可用服务提供者和对应的 invoker列表时，会调用RouterChian的route方法，其内部根据路由规则信息和invokers列表
+     * 来提供服务
      */
     private volatile BitList<Invoker<T>> invokers = BitList.emptyList();
 

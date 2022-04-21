@@ -52,6 +52,9 @@ public class CachedThreadPool implements ThreadPool {
         int threads = url.getParameter(THREADS_KEY, Integer.MAX_VALUE);
         int queues = url.getParameter(QUEUES_KEY, DEFAULT_QUEUES);
         int alive = url.getParameter(ALIVE_KEY, DEFAULT_ALIVE);
+        /**
+         * 设置了线程池中线程空闲时间，当线程空闲时间到达后线程会被回收
+         */
         return new ThreadPoolExecutor(cores, threads, alive, TimeUnit.MILLISECONDS,
                 queues == 0 ? new SynchronousQueue<Runnable>() :
                         (queues < 0 ? new LinkedBlockingQueue<Runnable>()

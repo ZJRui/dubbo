@@ -58,24 +58,52 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
         List<Invoker<T>> copyInvokers = invokers;
         checkInvokers(copyInvokers, invocation);
         String methodName = RpcUtils.getMethodName(invocation);
+        /**
+         * 获取重试次数
+         */
         int len = calculateInvokeTimes(methodName);
         // retry loop.
         RpcException le = null; // last exception.
         List<Invoker<T>> invoked = new ArrayList<Invoker<T>>(copyInvokers.size()); // invoked invokers.
         Set<String> providers = new HashSet<String>(len);
+        /**
+         * 使用循环，失败重试
+         */
         for (int i = 0; i < len; i++) {
+            /**
+             * 重试时进行了重新选择，避免重试时invoker列表已经发生变化
+             * 注意：如果列表发生了变化，那么invokerd判断会失效，因为invoker实例已经改变
+             */
             //Reselect before retry to avoid a change of candidate `invokers`.
             //NOTE: if `invokers` changed, then `invoked` also lose accuracy.
             if (i > 0) {
+                /**
+                 * 如果当前实例已经被销毁，则抛出异常
+                 * 检查是否有其他线程调用了当前ReferenceConfig的destroy方法，销毁了当前的消费者，如果当前消费者实例已经被销毁，
+                 * 那么重试就没有意义了，所以会抛出RPCException
+                 */
                 checkWhetherDestroyed();
+                /**
+                 * 重新获取所有的服务提供者
+                 * 因为从第一次调用开始到现在可能提供者列表已经变化了，获取列表后再次进行校验
+                 */
                 copyInvokers = list(invocation);
                 // check again
+                /**
+                 * 重新检查一下
+                 */
                 checkInvokers(copyInvokers, invocation);
             }
+            /**
+             * 选择负载均衡策略
+             */
             Invoker<T> invoker = select(loadbalance, invocation, copyInvokers, invoked);
             invoked.add(invoker);
             RpcContext.getServiceContext().setInvokers((List) invoked);
             boolean success = false;
+            /**
+             * 具体发起远程调用
+             */
             try {
                 Result result = invokeWithContext(invoker, invocation);
                 if (le != null && logger.isWarnEnabled()) {
@@ -115,6 +143,11 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
     }
 
     private int calculateInvokeTimes(String methodName) {
+        /**
+         * 从URL参数中获取设置的重试次数，如果用户没有设置重试次数，则取默认值，默认是2次。
+         * 配置的重试次数+1正常调用=总共调用次数
+         * <doubbo:reference retires="2"/>
+         */
         int len = getUrl().getMethodParameter(methodName, RETRIES_KEY, DEFAULT_RETRIES) + 1;
         RpcContext rpcContext = RpcContext.getClientAttachment();
         Object retry = rpcContext.getObjectAttachment(RETRIES_KEY);

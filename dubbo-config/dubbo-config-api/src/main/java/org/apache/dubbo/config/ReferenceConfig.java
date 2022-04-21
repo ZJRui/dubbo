@@ -473,6 +473,10 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
          *  负载均衡选择一个Invoker进行执行，而每一个Invoker本质上是ProtocolFilterWrapper返回的调用链对象--->ProtocolFIlterWrapper的refer返回的CallbackRegistrationInvoker.invoker
          *  执行调用链--->DubboInvoker.invoke.doInvoke 将请求发送给服务提供者的NettyServer
          *
+         *
+         *  ===================================
+         *
+         *
          */
 
 

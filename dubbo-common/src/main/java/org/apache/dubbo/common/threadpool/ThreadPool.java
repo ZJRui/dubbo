@@ -35,6 +35,15 @@ public interface ThreadPool {
     /**
      * Thread pool
      *
+     * 在dubbo线程模型中，为了尽早释放netty的io线程，某些线程模型会把请求投递到线程池进行一步处理，这里所谓的线程池是什么的线程池呢？
+     * 其实这里的线程池ThreadPool是一个SPI扩展接口。 Dubbo提供了一些实现。
+     * FixedThreadPool：创建一个有固定线程个数的线程池。
+     * LimitedThreadPool：创建一个线程池，这个线程池中的线程个数会随着需求动态增加，但是数量不会超过配置的阈值。另外空闲线程不会被回收，会一直存在。
+     *
+     * EagerThreadPool:创建一个线程池，这个线程池中，当所有核心线程都处于忙碌状态时，将你创阿基你新的线程来执行新任务，而不是把任务放入线程池的阻塞队列中。
+     *
+     * CachedThreadPool:创建一个自适应线程池，当线程空闲1分钟，线程会被回收，当有新请求到来时，会创建新线程
+     *
      * @param url URL contains thread parameter
      * @return thread pool
      */

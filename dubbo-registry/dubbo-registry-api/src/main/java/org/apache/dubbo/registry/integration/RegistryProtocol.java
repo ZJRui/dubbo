@@ -511,6 +511,19 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
     @Override
     @SuppressWarnings("unchecked")
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        /***
+         *
+         * ReferenceConfig.get-->ReferenceConfig.init--->ReferenceConfig.createProxy--------->Protocol$Adaptive.refer ---QosProtocolWrapper.refer
+         * ---->ProtocolListenerWrapper.refer ----->ProtocolFilterWrapper.refer ---->RegistryProtocol.refer--->RegistryProtocol.doRefer--->
+         * RegistryProtocol.getInvoker---->|new RegistryDirectory()
+         *                                 |RegistryDirectory.buildRouterChain
+         *                                 |RegistryDirectory.subscribe
+         *                                 |cluster.join(registryDirectory)---->Cluster$Adaptive.join-->MockClusterWrapper.join--->FailoverCluster
+         *                                 最终返回MockClusterInvoker，MockClusterInvoker内包含FailOverClusterInvoker，FailOverClusterInvoker内持有RegistryDirectory
+         *
+         * ReferenceConfig.createProxy针对MockClusterInvoker创建业务接口代理对象 proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
+         *
+         */
         url = getRegistryUrl(url);
         /**
          * 获取注册中心实例
@@ -651,6 +664,10 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
             directory.setRegisteredConsumerUrl(urlToRegistry);
             registry.register(directory.getRegisteredConsumerUrl());
         }
+        /**
+         * RegistryProtocol.refer -->doRefer-->RegistryProtocol.interceptInvoker--->
+         * RegistryProtocol.doCreateInvoker--> registryDirectory.buildRouteChain
+         */
         directory.buildRouterChain(urlToRegistry);
 
         /**

@@ -110,6 +110,9 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
         } catch (Throwable e) {
             logger.error("Failback to invoke method " + invocation.getMethodName() + ", wait for retry in background. Ignored exception: "
                 + e.getMessage() + ", ", e);
+            /**
+             * 实现失败后定时重试 ，将当前请求上下文添加到定时器
+             */
             if (retries > 0) {
                 addFailed(loadbalance, invocation, invokers, invoker, consumerUrl);
             }
@@ -162,6 +165,9 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
             try {
                 logger.info("Attempt to retry to invoke method " + invocation.getMethodName() +
                         ". The total will retry " + retries + " times, the current is the " + retriedTimes + " retry");
+                /**
+                 * 负载均衡选择一个invoker
+                 */
                 Invoker<T> retryInvoker = select(loadbalance, invocation, invokers, Collections.singletonList(lastInvoker));
                 lastInvoker = retryInvoker;
                 invokeWithContextAsync(retryInvoker, invocation, consumerUrl);
@@ -170,6 +176,9 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
                 if ((++retriedTimes) >= retries) {
                     logger.error("Failed retry times exceed threshold (" + retries + "), We have to abandon, invocation->" + invocation);
                 } else {
+                    /**
+                     * 再次重试
+                     */
                     rePut(timeout);
                 }
             }

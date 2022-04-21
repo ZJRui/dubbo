@@ -80,7 +80,21 @@ public class ContextFilter implements Filter, Filter.Listener {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        /**
+         * 服务提供方使用contextFilter 对请求进行拦截，并从RpcInvocation中获取attachments中的键值对，然后使用
+         * RpcContext.getContext().setAttachment 设置到上下文对象中。
+         *
+         * invocation中的属性是在AbstractInvoker对象的invoke方法中被设置到了 invocation中的
+         *
+         * 从invocation对象获取附加属性map
+         *
+         */
         Map<String, Object> attachments = invocation.getObjectAttachments();
+        /**
+         *
+         * 如果不为null则设置到上下文对象中。
+         *
+         */
         if (attachments != null) {
             Map<String, Object> newAttach = new HashMap<>(attachments.size());
             for (Map.Entry<String, Object> entry : attachments.entrySet()) {
@@ -114,6 +128,10 @@ public class ContextFilter implements Filter, Filter.Listener {
 
         // merged from dubbox
         // we may already add some attachments into RpcContext before this filter (e.g. in rest protocol)
+        /**
+         * 将附加属性设置到context中
+         * 然后服务提供者就可以使用 RpcContext.getContext.getAttachment
+         */
         if (attachments != null) {
             if (context.getObjectAttachments().size() > 0) {
                 context.getObjectAttachments().putAll(attachments);
@@ -138,6 +156,9 @@ public class ContextFilter implements Filter, Filter.Listener {
     public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation) {
         // pass attachments to result
         appResponse.addObjectAttachments(RpcContext.getServerContext().getObjectAttachments());
+        /**
+         * 清除 attachment
+         */
         removeContext();
     }
 

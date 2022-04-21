@@ -73,6 +73,11 @@ public abstract class AbstractLoadBalance implements LoadBalance {
      * @return weight
      */
     protected int getWeight(Invoker<?> invoker, Invocation invocation) {
+        /**
+         * 如果所有服务提供者权重不同，那么正常情况下应该是选择权重大的提供者来提供服务。但是Dubbo还考虑到另外一个因素就是
+         * 服务预热时间。
+         * 如果服务A刚启动，服务B已经服务了一段事件，则这个时候会选择服务B
+         */
         int weight;
         URL url = invoker.getUrl();
         if (invoker instanceof ClusterInvoker) {
@@ -83,14 +88,25 @@ public abstract class AbstractLoadBalance implements LoadBalance {
         if (REGISTRY_SERVICE_REFERENCE_PATH.equals(url.getServiceInterface())) {
             weight = url.getParameter(WEIGHT_KEY, DEFAULT_WEIGHT);
         } else {
+            /**
+             * h获取用户对该服务提供者设置的权重，默认情况下权重都是100
+             */
             weight = url.getMethodParameter(invocation.getMethodName(), WEIGHT_KEY, DEFAULT_WEIGHT);
             if (weight > 0) {
+                /**
+                 * 获取服务提供者发布服务时间
+                 */
                 long timestamp = invoker.getUrl().getParameter(TIMESTAMP_KEY, 0L);
                 if (timestamp > 0L) {
                     long uptime = System.currentTimeMillis() - timestamp;
                     if (uptime < 0) {
                         return 1;
                     }
+                    /**
+                     * 获取该用户设置的服务的预热时间，默认是10分钟
+                     *
+                     * 如果服务提供者还没过预热期，则让服务提供者的预热时间参与计算权重
+                     */
                     int warmup = invoker.getUrl().getParameter(WARMUP_KEY, DEFAULT_WARMUP);
                     if (uptime > 0 && uptime < warmup) {
                         weight = calculateWarmupWeight((int)uptime, warmup, weight);

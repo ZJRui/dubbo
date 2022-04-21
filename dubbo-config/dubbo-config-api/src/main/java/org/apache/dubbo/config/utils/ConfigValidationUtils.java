@@ -358,10 +358,16 @@ public class ConfigValidationUtils {
      */
     public static void checkMock(Class<?> interfaceClass, AbstractInterfaceConfig config) {
         String mock = config.getMock();
+        /**
+         * 没有设置mock则直接返回
+         */
         if (ConfigUtils.isEmpty(mock)) {
             return;
         }
 
+        /**
+         * 获取格式化的mock方式
+         */
         String normalizedMock = MockInvoker.normalizeMock(mock);
         if (normalizedMock.startsWith(RETURN_PREFIX)) {
             normalizedMock = normalizedMock.substring(RETURN_PREFIX.length()).trim();
@@ -385,6 +391,9 @@ public class ConfigValidationUtils {
             }
         } else {
             //Check whether the mock class is a implementation of the interfaceClass, and if it has a default constructor
+            /**
+             * 检查mock接口实现类是否符合规则
+             */
             MockInvoker.getMockObject(config.getScopeModel().getExtensionDirector(), normalizedMock, interfaceClass);
         }
     }

@@ -90,20 +90,38 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
         Result result;
-
+        /**
+         * 查看Url里面是否有mock字段
+         */
         String value = getUrl().getMethodParameter(invocation.getMethodName(), MOCK_KEY, Boolean.FALSE.toString()).trim();
+        /**
+         * 如果没有，或者值默认为false，则说明没有设置降级策略
+         */
         if (ConfigUtils.isEmpty(value)) {
             //no mock
+            /**
+             * 没有mock 正常发起远程调用
+             */
             result = this.invoker.invoke(invocation);
-        } else if (value.startsWith(FORCE_KEY)) {
+        } else if (value.startsWith(FORCE_KEY)) {//设置了force降级策略
             if (logger.isWarnEnabled()) {
                 logger.warn("force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + getUrl());
             }
             //force:direct mock
+            /**
+             * 如果url中有mock字段并且值异force开头，则说明设置了force:return 降级策略，那么会鸡子儿调用doMockInvoke方法（其内部会调用
+             * 创建的MockInvoker的invoke方法） 返回mock值，而不发起远程调用
+             *
+             */
             result = doMockInvoke(invocation, null);
         } else {
             //fail-mock
             try {
+                /**
+                 * 如果url里面含有mock字段，并且其值以fail开头，则说明设置了fail:return 降级策略，那么先发起
+                 * 远程调用。如果远程调用成功，则直接返回远程返回的结果（如果这里使用了默认的集群容错策略，则会调用FailOverClusterInvoker的invoke方法发起远程
+                 * 调用）； 如果远程调用失败，则直接返回mock的值
+                 */
                 result = this.invoker.invoke(invocation);
 
                 //fix:#4585

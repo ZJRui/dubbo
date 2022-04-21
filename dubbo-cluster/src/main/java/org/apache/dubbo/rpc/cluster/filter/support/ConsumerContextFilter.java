@@ -124,6 +124,10 @@ public class ConsumerContextFilter implements ClusterFilter, ClusterFilter.Liste
 
     private void removeContext() {
         RpcContext.removeServiceContext();
+        /**
+         * 清除附加属性。请求发出去后，会清除当前与调用线程关联的线程变量中的 附加属性。
+         *
+         */
         RpcContext.removeClientAttachment();
         // server context must not be removed because user might use it on callback.
         // So the clear of is delayed til the start of the next rpc call, see RpcContext.removeServerContext(); in invoke() above

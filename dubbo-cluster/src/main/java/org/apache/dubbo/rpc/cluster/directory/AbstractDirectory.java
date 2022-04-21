@@ -79,6 +79,7 @@ public abstract class AbstractDirectory<T> implements Directory<T> {
 
     protected volatile URL consumerUrl;
 
+
     protected RouterChain<T> routerChain;
 
     protected final Map<String, String> queryMap;

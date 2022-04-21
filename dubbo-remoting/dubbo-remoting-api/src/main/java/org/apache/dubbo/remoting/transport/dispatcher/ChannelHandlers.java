@@ -44,6 +44,13 @@ public class ChannelHandlers {
     protected ChannelHandler wrapInternal(ChannelHandler handler, URL url) {
         /**
          * 在下面的dispatch函数内会确定消费端Dubbo内部的线程池模型
+         *
+         * Dubbo 何时确实使用哪种线程模型？
+         * 服务提供方会启动NettyServer来监听消费方的连接在 下面的 ChannelHandlers.wrap(handler, url) 中会执行
+         * getExtensionLoader(Dispatcher.class)
+         *                 .getAdaptiveExtension().dispatch(handler, url)
+         * 根据url里的线程模型来选择具体的Dispatcher实现类。  默认是allDispatcher
+         *
          */
         return new MultiMessageHandler(new HeartbeatHandler(url.getOrDefaultFrameworkModel().getExtensionLoader(Dispatcher.class)
                 .getAdaptiveExtension().dispatch(handler, url)));

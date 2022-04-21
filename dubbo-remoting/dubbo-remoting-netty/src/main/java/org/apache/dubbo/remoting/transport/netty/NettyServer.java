@@ -74,6 +74,12 @@ public class NettyServer extends AbstractServer implements RemotingServer {
          * 连接事件、断开事件、心跳事件，这里对应的是AllChannelHandler类把IO线程接收到的所有消息包装为ChannelEventRunnable任务并投递到
          * 线程池中。
          *
+         * =============
+         * Dubbo 何时确实使用哪种线程模型？
+         * 服务提供方会启动NettyServer来监听消费方的连接在 下面的 ChannelHandlers.wrap(handler, url) 中会执行
+         * getExtensionLoader(Dispatcher.class)
+         *                 .getAdaptiveExtension().dispatch(handler, url)
+         * 根据url里的线程模型来选择具体的Dispatcher实现类。
          *
          */
         super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ChannelHandlers.wrap(handler, url));

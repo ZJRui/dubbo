@@ -69,6 +69,10 @@ public class ForkingClusterInvoker<T> extends AbstractClusterInvoker<T> {
             final List<Invoker<T>> selected;
             final int forks = getUrl().getParameter(FORKS_KEY, DEFAULT_FORKS);
             final int timeout = getUrl().getParameter(TIMEOUT_KEY, DEFAULT_TIMEOUT);
+            /**
+             * 获取并行执行的invoker列表
+             *
+             */
             if (forks <= 0 || forks >= invokers.size()) {
                 selected = invokers;
             } else {
@@ -86,6 +90,9 @@ public class ForkingClusterInvoker<T> extends AbstractClusterInvoker<T> {
             final BlockingQueue<Object> ref = new LinkedBlockingQueue<>(1);
             for (final Invoker<T> invoker : selected) {
                 URL consumerUrl = RpcContext.getServiceContext().getConsumerUrl();
+                /**
+                 * 使用线程池让invoker并发执行
+                 */
                 executor.execute(() -> {
                     try {
                         if (ref.size() > 0) {
