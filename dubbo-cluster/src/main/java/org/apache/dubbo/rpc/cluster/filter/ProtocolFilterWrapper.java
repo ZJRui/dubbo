@@ -54,10 +54,39 @@ public class ProtocolFilterWrapper implements Protocol {
 
     @Override
     public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        /**
+         * 如果是注册中心的url则直接跳过。 这是什么意思呢？
+         *
+         * RegistryProtocol  DubboProtocol都是protocol，ProtocolFilterWrapper 都会对这两个Protocol进行wrapper
+         * 当RegistryProtocol和DubboProtocol的export方法执行之前都会先执行ProtocolFilterWrapper的export
+         * 但是从这里我们 看到ProtocolFilterWrapper对 RegistryProtocol没有 做什么特别的处理，而是直接跳过了
+         */
         if (UrlUtils.isRegistry(invoker.getUrl())) {
             return protocol.export(invoker);
         }
+        /**
+         * 在服务暴露前（比如RegistryProtocol的export执行前）
+         * ProtocolListenerWrapper实现中 在对服务提供者进行暴露时回调对应的监听方法
+         *
+         * 因为协议的包装顺序是 ProtocolListenerWrapper包装了协议实现类DubboProtocol。然后ProtocolFilterWrapper包装了ProtocolListenerWrapper
+         *
+         * 因此在执行export的时候先 执行ProtocolFIlterWrapper.export ，ProtocolFilterWrapper会调用 ProtocolListenerWrapper的export方法。
+         *
+         *-----------------------------
+         * builder.buildInvokerChain中会构建一个Filter调用链。
+         *
+         *
+         */
         FilterChainBuilder builder = getFilterChainBuilder(invoker.getUrl());
+        /**
+         * 先构造拦截器链（会过滤Provider端分组），然后出发dubbo协议暴露
+         * 出发dubbo协议暴露前先对服务Invoker（也就是ProxyFactory的getInvoker方法返回的AbstractProxyInvoker）做一层拦截器构建。将
+         * AbstractProxyInvoker挂载到拦截器链尾部，然后逐层包裹其他拦截器。
+         * 构造拦截器之后会调用Dubbo协议进行暴露，DubboProtocol协议的export内创建DubboExporter，这个DubboExporter对象持有拦截器链的最外层Invoker
+         * 因此通过DubboExporter就可以得到拦截器链，然后触发拦截器链执行 最终执行AbstractProxyInvoker的invoke
+         *
+         * 实际上 这里的 ProtocolFilterWrapper包装了ProtocolListenerWrapper ，因此下面的protocol是ProtocolListenerWrapper
+         */
         return protocol.export(builder.buildInvokerChain(invoker, SERVICE_FILTER_KEY, CommonConstants.PROVIDER));
     }
 
@@ -67,6 +96,13 @@ public class ProtocolFilterWrapper implements Protocol {
 
     @Override
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        /**
+         * 如果是注册中心的url则直接跳过。 这是什么意思呢？
+         *
+         * RegistryProtocol  DubboProtocol都是protocol，ProtocolFilterWrapper 都会对这两个Protocol进行wrapper
+         * 当RegistryProtocol和DubboProtocol的export方法执行之前都会先执行ProtocolFilterWrapper的export
+         * 但是从这里我们 看到ProtocolFilterWrapper对 RegistryProtocol没有 做什么特别的处理，而是直接跳过了
+         */
         if (UrlUtils.isRegistry(url)) {
             return protocol.refer(type, url);
         }

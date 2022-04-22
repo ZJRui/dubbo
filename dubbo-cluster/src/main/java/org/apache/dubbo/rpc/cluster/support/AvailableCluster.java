@@ -30,6 +30,9 @@ public class AvailableCluster extends AbstractCluster {
 
     @Override
     public <T> AbstractClusterInvoker<T> doJoin(Directory<T> directory) throws RpcException {
+        /**
+         * 注意这里将Directory对象传递给了Invoker对象
+         */
         return new AvailableClusterInvoker<>(directory);
     }
 }

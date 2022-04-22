@@ -43,6 +43,9 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
     @Override
     public <T> Invoker<T> buildInvokerChain(final Invoker<T> originalInvoker, String key, String group) {
 
+        /**
+         * 将真实的Invoker（Proxyfactory的getInvoker返回的AbstractProxyInvoker ）放置到拦截器尾部
+         */
         Invoker<T> last = originalInvoker;
         URL url = originalInvoker.getUrl();
         List<ModuleModel> moduleModels = getModuleModelsFromUrl(url);

@@ -37,8 +37,15 @@ public class AvailableClusterInvoker<T> extends AbstractClusterInvoker<T> {
 
     @Override
     public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) throws RpcException {
+        /**
+         * 这里的invokers是 注册中心invoker实例
+         * 因为AvailableClusterInvoker对象在创建的时候接受了Directory对象，这个Directory对象内部就包含了 注册中心实例invokers。
+         * 因此 当执行 AvailableClusterInvoker的invoke方法的时候 就可以通过 directory得到Invokers。
+         * 然后invoke方法内部又调用了 doInvoke，因此doInvoke方法中 能够拿到invokers
+         *
+         */
         for (Invoker<T> invoker : invokers) {
-            if (invoker.isAvailable()) {
+            if (invoker.isAvailable()) {//判断 特定注册中心是否包含provider服务。
                 return invokeWithContext(invoker, invocation);
             }
         }

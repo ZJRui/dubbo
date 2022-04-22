@@ -147,13 +147,25 @@ public class ZookeeperRegistry extends CacheableFailbackRegistry {
     public void doSubscribe(final URL url, final NotifyListener listener) {
         try {
             checkDestroyed();
+            /**
+             * 订阅所有数据
+             */
             if (ANY_VALUE.equals(url.getServiceInterface())) {
                 String root = toRootPath();
                 boolean check = url.getParameter(CHECK_KEY, false);
                 ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.computeIfAbsent(url, k -> new ConcurrentHashMap<>());
+                /**
+                 * zkListener 为空，说明是第一次，新建一个listener
+                 */
                 ChildListener zkListener = listeners.computeIfAbsent(listener, k -> (parentPath, currentChilds) -> {
+                    /**
+                     * 内部类的方法，不会立即执行，只会才出发变更通知时执行
+                     */
                     for (String child : currentChilds) {
                         child = URL.decode(child);
+                        /***
+                         * 如果存在子节点还未被订阅，说明是新的节点，则订阅
+                         */
                         if (!anyServices.contains(child)) {
                             anyServices.add(child);
                             subscribe(url.setPath(child).addParameters(INTERFACE_KEY, child,
@@ -161,12 +173,21 @@ public class ZookeeperRegistry extends CacheableFailbackRegistry {
                         }
                     }
                 });
+                /**
+                 * 创建持久节点，接下来订阅持久节点的直接子节点
+                 */
                 zkClient.create(root, false);
                 List<String> services = zkClient.addChildListener(root, zkListener);
                 if (CollectionUtils.isNotEmpty(services)) {
+                    /**
+                     * 遍历所有子节点进行订阅
+                     */
                     for (String service : services) {
                         service = URL.decode(service);
                         anyServices.add(service);
+                        /**
+                         * 增加当前节点的订阅，并且会返回该节点下所有子节点列表
+                         */
                         subscribe(url.setPath(service).addParameters(INTERFACE_KEY, service,
                             Constants.CHECK_KEY, String.valueOf(check)), listener);
                     }
@@ -175,12 +196,33 @@ public class ZookeeperRegistry extends CacheableFailbackRegistry {
                 CountDownLatch latch = new CountDownLatch(1);
                 try {
                     List<URL> urls = new ArrayList<>();
+                    /**
+                     * 根据URL的类别获取一组要订阅的路径。
+                     *
+                     * 此处会根据url中的category属性值获取具体的类别： providers,routers,consumers,configurators,然后拉取直接子节点的数据进行通知notify。
+                     * 如果是providers类别的数据，则订阅方会更新本地Directory管理的Invoker服务列表；
+                     * 如果是routers分类，则订阅方会更新本地路由规则列表
+                     * 如果是configurators类别，则订阅方会更新或覆盖本地动态参数列表。
+                     *
+                     *
+                     */
                     for (String path : toCategoriesPath(url)) {
+                        /**
+                         * 如果listener为空则创建缓存
+                         */
                         ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.computeIfAbsent(url, k -> new ConcurrentHashMap<>());
+
+                        /**
+                         *
+                         */
+
                         ChildListener zkListener = listeners.computeIfAbsent(listener, k -> new RegistryChildListenerImpl(url, path, k, latch));
                         if (zkListener instanceof RegistryChildListenerImpl) {
                             ((RegistryChildListenerImpl) zkListener).setLatch(latch);
                         }
+                        /**
+                         * 订阅该节点下的子路径并缓存
+                         */
                         zkClient.create(path, false);
                         /**
                          *
@@ -196,6 +238,18 @@ public class ZookeeperRegistry extends CacheableFailbackRegistry {
                      * 上面从ZooKeeper获取服务提供者的地址列表，等Zookeeper返回地址列表后会调用RegistryDirectory的notify方法
                      * 这里的listener就是 RegistryDirectory ,RegistryDirectory 继承自DynamicDirectory
                      * DynamicDirectory 实现了NotifyListener 接口。
+                     *
+                     * 在第一次发起订阅时会进行一次数据拉取操作，同时触发RegistryDirectory.notify方法，这里的通知数据是某一个类别的全量数据，
+                     *   比如Providers和routes类别数据。当通知Providers数据时，在RegistryDirectory#toInvokers方法内完成Invoker转换。
+                     *
+                     *   ==========================
+                     *  zookeeper的订阅通常有 pull和push 两种方式，一种是客户端定时轮询注册中心拉取配置，另一种是注册中煤新主动推送数据给客户端。 这两种方式各有利弊，目前dubbo采用
+                     *  的是第一次启动拉取方式，后续接收事件重新拉取数据。 也就是事件通知+客户端拉取。  在上面 客户端第一次连接上注册中心时，拉获取对应目录下的全量数据，
+                     *  并在订阅节点上注册一个watch，客户端与注册中心之间保持TCP长连接，后续每个节点有任何数据变化的时候注册中心会根据watcher的回调主动通知客户端，
+                     *  然后客户端收到通知后，会把对应节点下的全量数据都拉取过来。这一点在notifyListener的notify接口上有约束的注释说明。
+                     *
+                     * ---------------
+                     * 回调notifyListener，更新本地缓存信息
                      *
                      */
                     notify(url, listener, urls);

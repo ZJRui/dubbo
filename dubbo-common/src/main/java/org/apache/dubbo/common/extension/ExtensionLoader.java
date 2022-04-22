@@ -28,43 +28,15 @@ import org.apache.dubbo.common.lang.Prioritized;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.resource.Disposable;
-import org.apache.dubbo.common.utils.ArrayUtils;
-import org.apache.dubbo.common.utils.ClassLoaderResourceLoader;
-import org.apache.dubbo.common.utils.ClassUtils;
-import org.apache.dubbo.common.utils.CollectionUtils;
-import org.apache.dubbo.common.utils.ConcurrentHashSet;
-import org.apache.dubbo.common.utils.ConfigUtils;
-import org.apache.dubbo.common.utils.Holder;
-import org.apache.dubbo.common.utils.NativeUtils;
-import org.apache.dubbo.common.utils.ReflectUtils;
-import org.apache.dubbo.common.utils.StringUtils;
-import org.apache.dubbo.rpc.model.ApplicationModel;
-import org.apache.dubbo.rpc.model.FrameworkModel;
-import org.apache.dubbo.rpc.model.ModuleModel;
-import org.apache.dubbo.rpc.model.ScopeModel;
-import org.apache.dubbo.rpc.model.ScopeModelAccessor;
+import org.apache.dubbo.common.utils.*;
+import org.apache.dubbo.rpc.model.*;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.ServiceLoader;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -74,9 +46,7 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.sort;
 import static java.util.ServiceLoader.load;
 import static java.util.stream.StreamSupport.stream;
-import static org.apache.dubbo.common.constants.CommonConstants.COMMA_SPLIT_PATTERN;
-import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.REMOVE_VALUE_PREFIX;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
 
 /**
  * {@link org.apache.dubbo.rpc.model.ApplicationModel}, {@code DubboBootstrap} and this class are
@@ -90,7 +60,7 @@ import static org.apache.dubbo.common.constants.CommonConstants.REMOVE_VALUE_PRE
  * <li>auto wrap extension in wrapper </li>
  * <li>default extension is an adaptive instance</li>
  * </ul>
- *
+ * <p>
  * ApplicationModel、DubboBootstrap 和这个类目前被设计为单例或静态（本身完全静态或使用一些静态字段）。 因此从它们返回的实例属于进程或类加载器范围。 如果要在单个进程中支持多个 dubbo 服务器，可能需要重构这三个类。
  * 加载 dubbo 扩展
  * 自动注入依赖扩展
@@ -106,12 +76,11 @@ public class ExtensionLoader<T> {
     /**
      * Protocol protocol=ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension()
      * 这里的ExtensionLoader类似JDK标准SPI中的ServiceLoader
-     *
+     * <p>
      * 每个扩展接口对应着字节的ExtensionLoader对昂， ExtensionLoader对象覅昂的type属性就是扩展接口。
-     *
+     * <p>
      * 在DubboBootstrap类的静态newInstance方法中会 创建ExtensionDirector对象，这个ExtensionDirector 对象中
      * 会缓存扩展接口与对应的ExtensionLoader的映射。
-     *
      */
 
     private static final Logger logger = LoggerFactory.getLogger(ExtensionLoader.class);
@@ -128,9 +97,23 @@ public class ExtensionLoader<T> {
 
     private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<>();
 
+    /**
+     * ExtensionLoader（一个ExtensionLoader对应一个扩展点接口）中会缓存两个与@Adaptive有关的对象，一个缓存在cachedAdaptiveClass中，即Adaptive具体实现类的class类型。
+     * 另一个缓存在cachedAdaptiveInstance中，即class的具体实例化对象。
+     * 在扩展点初始化时，如果发现实现类上有@Adaptive注解，则直接赋值给cachedAdaptiveClass，后续实例化类的时候就不会再动态生成代码，直接实例化cachedAdaptiveClass，并
+     * 把实例缓存到cachedAdaptiveInstance中。
+     * 如果注解在接口方法上，则会根据参数，动态获得扩展点的实现是，生成Adaptive类，再缓存到cachedAdaptiveInstance中。
+     */
     private final Map<String, Object> cachedActivates = Collections.synchronizedMap(new LinkedHashMap<>());
     private final Map<String, Set<String>> cachedActivateGroups = Collections.synchronizedMap(new LinkedHashMap<>());
     private final Map<String, String[][]> cachedActivateValues = Collections.synchronizedMap(new LinkedHashMap<>());
+    /**
+     * ExtensionLoader（一个ExtensionLoader对应一个扩展点接口）中会缓存两个与@Adaptive有关的对象，一个缓存在cachedAdaptiveClass中，即Adaptive具体实现类的class类型。
+     * 另一个缓存在cachedAdaptiveInstance中，即class的具体实例化对象。
+     * 在扩展点初始化时，如果发现实现类上有@Adaptive注解，则直接赋值给cachedAdaptiveClass，后续实例化类的时候就不会再动态生成代码，直接实例化cachedAdaptiveClass，并
+     * 把实例缓存到cachedAdaptiveInstance中。
+     * 如果注解在接口方法上，则会根据参数，动态获得扩展点的实现是，生成Adaptive类，再缓存到cachedAdaptiveInstance中。
+     */
     private final ConcurrentMap<String, Holder<Object>> cachedInstances = new ConcurrentHashMap<>();
     private final Holder<Object> cachedAdaptiveInstance = new Holder<>();
     private volatile Class<?> cachedAdaptiveClass = null;
@@ -790,7 +773,7 @@ public class ExtensionLoader<T> {
              * List<Filter> filters =ExtensionLoader.getExtensionLoader(Filter.class).getActiveExtension(invoker.getUrl(),key ,group)
              *
              * 比如，当服务端启动时只会加载group 为provider的filter扩展实现类：
-             * @Active(group=Constants.provider ,value=Constants.executes_key)
+             * @Active(group=Constants.provider , value=Constants.executes_key)
              * public class ExecuteLimitFilter implement Filter
              *
              * 当消费端启动时只会加载狗任凭为consume的filter扩展实现类：
@@ -812,6 +795,20 @@ public class ExtensionLoader<T> {
                 instance = (T) extensionInstances.get(clazz);
                 instance = postProcessBeforeInitialization(instance, name);
                 /**
+                 *通过set方法为 instance设置属性值。   instance的属性被赋值的条件是 （1）有set方法（2）有对应的扩展点实例对象。
+                 *
+                 * 如果某个扩展类是另外一个扩展类的成员属性，并且拥有set方法，那么框架会自动注入对应的扩展点实例。但是这里存在一个问题 ，如果扩展属性是一个接口，
+                 * 这个接口有多个实现，那么具体注入哪个呢？ 这就涉及自适应特性。我们使用@Adaptive 注解，可以动态通过URL中的参数来确定要使用哪个具体的实现类，从而
+                 * 解决自动加载中的实例注入的问题。 比如
+                 * @SPI(value = "netty", scope = ExtensionScope.FRAMEWORK)
+                 * public interface Transporter {
+                 *@Adaptive({Constants.SERVER_KEY, Constants.TRANSPORTER_KEY})
+                 *RemotingServer bind (URL url, ChannelHandler handler) throws RemotingException;
+                 * }
+                 *
+                 * @Adaptive传入了两个 Constants中的参数，server和transport。当外部调用Transport.bind 方法时，会动态从传入的参数URL中提取key参数 server的value
+                 * 值，如果能匹配上某个扩展实现类则直接使用对应的实现类。如果未匹配上，则继续通过第二个key参数 transport 提取value值。 如果都没匹配上，则抛出异常。也就是
+                 * 说如果@Adaptive中传入了多个参数，则一次进行实现类的匹配，直到最后抛出异常。
                  *
                  */
                 injectExtension(instance);
@@ -914,6 +911,24 @@ public class ExtensionLoader<T> {
         if (injector == null) {
             return instance;
         }
+
+        /**
+         *通过set方法为 instance设置属性值。   instance的属性被赋值的条件是 （1）有set方法（2）有对应的扩展点实例对象。
+         *
+         * 如果某个扩展类是另外一个扩展类的成员属性，并且拥有set方法，那么框架会自动注入对应的扩展点实例。但是这里存在一个问题 ，如果扩展属性是一个接口，
+         * 这个接口有多个实现，那么具体注入哪个呢？ 这就涉及自适应特性。我们使用@Adaptive 注解，可以动态通过URL中的参数来确定要使用哪个具体的实现类，从而
+         * 解决自动加载中的实例注入的问题。 比如
+         * @SPI(value = "netty", scope = ExtensionScope.FRAMEWORK)
+         * public interface Transporter {
+         *@Adaptive({Constants.SERVER_KEY, Constants.TRANSPORTER_KEY})
+         *RemotingServer bind (URL url, ChannelHandler handler) throws RemotingException;
+         * }
+         *
+         * @Adaptive传入了两个 Constants中的参数，server和transport。当外部调用Transport.bind 方法时，会动态从传入的参数URL中提取key参数 server的value
+         * 值，如果能匹配上某个扩展实现类则直接使用对应的实现类。如果未匹配上，则继续通过第二个key参数 transport 提取value值。 如果都没匹配上，则抛出异常。也就是
+         * 说如果@Adaptive中传入了多个参数，则一次进行实现类的匹配，直到最后抛出异常。
+         *
+         */
 
         try {
             for (Method method : instance.getClass().getMethods()) {

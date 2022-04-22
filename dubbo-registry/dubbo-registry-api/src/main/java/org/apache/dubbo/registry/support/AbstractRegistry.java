@@ -81,6 +81,10 @@ public abstract class AbstractRegistry implements Registry {
     private static final int MAX_RETRY_TIMES_SAVE_PROPERTIES = 3;
     // Log output
     protected final Logger logger = LoggerFactory.getLogger(getClass());
+    /**
+     * 消费者或服务治理中心获取注册信息后会做本地缓存。 内存中会有一份，保存在Properties对象里，磁盘上也会持久化一份文件，通过file对象应用。
+     *Properties中使用URL#serviceKey作为key，提供者列表、路由规则列表和配置规则列表作为value。 由于value是列表，当存在多个的时候使用空格隔开。
+     */
     // Local disk cache, where the special key value.registries records the list of registry centers, and the others are the list of notified service providers
     private final Properties properties = new Properties();
     // File cache timing writing
@@ -89,11 +93,16 @@ public abstract class AbstractRegistry implements Registry {
     private final AtomicInteger savePropertiesRetryTimes = new AtomicInteger();
     private final Set<URL> registered = new ConcurrentHashSet<>();
     private final ConcurrentMap<URL, Set<NotifyListener>> subscribed = new ConcurrentHashMap<>();
+    /**
+     * 内存中的服务缓存对象。
+     * key是消费者URL， 内层map 的key是分类，包含providers,consumers,routes,configurators四种。
+     *内层map的value是对应的付服务列表，对于没有服务提供者提供服务的url，他会以特殊的 empty://前缀开头
+     */
     private final ConcurrentMap<URL, Map<String, List<URL>>> notified = new ConcurrentHashMap<>();
     // Is it synchronized to save the file
     private boolean syncSaveFile;
     private URL registryUrl;
-    // Local disk cache file
+    // Local disk cache file 消费者或服务治理中心获取注册信息后会做本地缓存。 内存中会有一份，保存在Properties对象里，磁盘上也会持久化一份文件，通过file对象应用。
     private File file;
     private boolean localCacheEnabled;
     protected RegistryManager registryManager;

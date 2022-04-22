@@ -239,6 +239,15 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
 
     @Override
     public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+        /**
+         * 注册中心在服务暴露时一次做了几件事情：
+         * （1）委托具体协议（Duboo）进行服务暴露，创建NettyServer监听端口和保存服务实例。
+         * （2）创建注册中心对象，与注册中心创建TCP连接
+         * （3）注册服务元数据到注册中心
+         * （4）定于Configurators节点，监听服务动态属性变更事件
+         * （5）服务销毁首尾工作，比如关闭端口、反注册服务信息等。
+         *
+         */
         URL registryUrl = getRegistryUrl(originInvoker);
         // url to export locally
         URL providerUrl = getProviderUrl(originInvoker);
@@ -247,8 +256,14 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call
         //  the same service. Because the subscribed is cached key with the name of the service, it causes the
         //  subscription information to cover.
+        // FIXME 提供者订阅时，会影响场景：某JVM暴露服务并调用
+        // 相同的服务。 因为订阅的是带有服务名称的缓存键，所以会导致
+        // 要覆盖的订阅信息。
         final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
         final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
+        /**
+         * 监听服务接口下configurators节点，用于处理动态配置
+         */
         Map<URL, NotifyListener> overrideListeners = getProviderConfigurationListener(providerUrl).getOverrideListeners();
         overrideListeners.put(registryUrl, overrideSubscribeListener);
 
@@ -259,7 +274,8 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
          * 先从invoker中抽取出服务提供者url，调用底层protocol(通过SPI 注入的具体protocol，比如dubbo protocol)
          * 的export执行导出，然后从invoker抽取出注册中心url，在调用注册中心的factory获取注册中心，最后进行服务的注册。
          *
-         * 调用底层Protocol导出服务
+         * 调用底层Protocol导出服务。 doLocalExport内部对服务进行了暴露。 doLocalExport方法返回之后需要 注册服务元数据到注册中心
+         *
          */
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
 
@@ -274,7 +290,7 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         boolean register = providerUrl.getParameter(REGISTER_KEY, true) && registryUrl.getParameter(REGISTER_KEY, true);
         if (register) {
             /**
-             * 注册服务
+             * 注册服务元数据
              */
             register(registry, registeredProviderUrl);
         }
@@ -326,12 +342,16 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
              * Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
              * 得到的Invoker是 JavassistProxyFactory中创建的一个 new AbstractProxyInvoker
              *
-             * 然后在 serviceconfig的doExportUrl中执行
+             *    然后在 serviceconfig的doExportUrl中执行
              *   Exporter<?> exporter = protocolSPI.export(invoker);
              *   这里的protocolSPI是RegistryProtocol，RegistryProtocol的export方法中 会执行doLocalExport
              *   在执行之前对 originInvoker(new  AbstractProxyInvoker)进行了一次 包装InvokerDelegate，
              *   然后使用protocol（DubboProtocol）进行export
              *
+             *
+             *    在下面的代码中 new  ExporterChangeableWrapper 之前  先执行了 protocol.export(invokerDelegate)
+             *    也就是 说 doLocalExport 方法返回时 已经 使用DubboProtocol对服务 进行了暴露，因此doLocalExport方法之后
+             *    就是注册服务元数据到注册中心
              */
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
@@ -489,6 +509,10 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
      * @return
      */
     private URL getProviderUrl(final Invoker<?> originInvoker) {
+        /**
+         *   registry://host:port/com.alibaba.dubbo.registry.RegistryService?protocol=zookeeper&export=dubbo://ip:port/xxx?..。
+         *   获取export
+         */
         Object providerURL = originInvoker.getUrl().getAttribute(EXPORT_KEY);
         if (!(providerURL instanceof URL)) {
             throw new IllegalArgumentException("The registry export url is null! registry: " + originInvoker.getUrl().getAddress());
@@ -535,8 +559,12 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
             return proxyFactory.getInvoker((T) registry, type, url);
         }
 
+
         // group="a,b" or group="*"
         Map<String, String> qs = (Map<String, String>) url.getAttribute(REFER_KEY);
+        /**
+         * 根据配置处理多分组结果聚合
+         */
         String group = qs.get(GROUP_KEY);
         if (StringUtils.isNotEmpty(group)) {
             if ((COMMA_SPLIT_PATTERN.split(group)).length > 1 || "*".equals(group)) {
@@ -545,6 +573,9 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         }
 
         Cluster cluster = Cluster.getCluster(url.getScopeModel(), qs.get(CLUSTER_KEY));
+        /**
+         * 处理定于数据并通过Cluster合并多个Invoker
+         */
         return doRefer(cluster, registry, type, url, qs);
     }
 
@@ -637,7 +668,11 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
     public <T> ClusterInvoker<T> getInvoker(Cluster cluster, Registry registry, Class<T> type, URL url) {
         // FIXME, this method is currently not used, create the right registry before enable.
         /**
-         * 创建RegistryDirectory
+         * 创建RegistryDirectory,这个是消费核心关键，持有实际Invoker和接收订阅通知
+         *
+         * 这里的URL其实是注册中心地址，真实消费方的元数据信息是放在refer属性中存储的
+         *
+         * RegistryDirectory实现了NotifyListener接口，服务变更会触发这个类回调notify方法，用于重新引用服务。
          */
         DynamicDirectory<T> directory = new RegistryDirectory<>(type, url);
         return doCreateInvoker(directory, cluster, registry, type);
@@ -662,6 +697,9 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         urlToRegistry = urlToRegistry.setServiceModel(directory.getConsumerUrl().getServiceModel());
         if (directory.isShouldRegister()) {
             directory.setRegisteredConsumerUrl(urlToRegistry);
+            /**
+             * 注册消费信息到注册中心
+             */
             registry.register(directory.getRegisteredConsumerUrl());
         }
         /**
@@ -671,7 +709,7 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
         directory.buildRouterChain(urlToRegistry);
 
         /**
-         *向注册中心订阅服务提供者的服务
+         * 向注册中心订阅服务提供者的服务
          * 这里会执行ZookeeperRegistry的doSubscribe
          * 在doSubscribe方法的最后 获取到Zookeeper的服务提供者注册信息之后会执行
          *   notify(url, listener, urls);
@@ -679,6 +717,12 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
          *   notify会执行AbstractRegistry的notify方法，在这个方法中会执行RegistryDirectory的notify方法
          *
          *   RegistryDirectory的notify方法中会执行refreshInvoker--->toInvokers
+         *
+         *   -------------------
+         *   订阅服务提供者、路由和动态配置
+         *
+         *   在第一次发起订阅时会进行一次数据拉取操作，同时触发RegistryDirectory.notify方法，这里的通知数据是某一个类别的全量数据，
+         *   比如Providers和routes类别数据。当通知Providers数据时，在RegistryDirectory#toInvokers方法内完成Invoker转换。
          */
 
         directory.subscribe(toSubscribeUrl(urlToRegistry));
@@ -700,7 +744,10 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
          * 默认使用JavassistProxyFactory的getProxy方法。
          *
          *
+         *通过cluster合并invokers，同时默认会启用FailOverClusterInvoker策略进行服务调用重试
          *
+         *
+         * 在多注册中心场景下，默认使用的集群策略是available （AvailableCluster）
          *
          */
         return (ClusterInvoker<T>) cluster.join(directory, true);
@@ -823,6 +870,10 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
 
         @Override
         public void unexport() {
+            /**
+             * Invoker销毁是注册端口和map中服务实例等资源
+             *
+             */
             exporter.unexport();
         }
     }
@@ -1027,6 +1078,9 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
 
             Registry registry = RegistryProtocol.this.getRegistry(getRegistryUrl(originInvoker));
             try {
+                /**
+                 * 移除已注册的元数据
+                 */
                 registry.unregister(registerUrl);
             } catch (Throwable t) {
                 logger.warn(t.getMessage(), t);
@@ -1034,9 +1088,17 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
             try {
                 if (subscribeUrl != null) {
                     Map<URL, NotifyListener> overrideListeners = getProviderConfigurationListener(subscribeUrl).getOverrideListeners();
+                    /**
+                     *
+                     * 去掉订阅配置监听器
+                     *
+                     */
                     NotifyListener listener = overrideListeners.remove(registerUrl);
                     if (listener != null) {
                         if (!registry.isServiceDiscovery()) {
+                            /**
+                             * 去掉订阅配置监听器
+                             */
                             registry.unsubscribe(subscribeUrl, listener);
                         }
                         ApplicationModel applicationModel = getApplicationModel(registerUrl.getScopeModel());

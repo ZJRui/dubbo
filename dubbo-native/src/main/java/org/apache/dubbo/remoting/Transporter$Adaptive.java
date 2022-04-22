@@ -15,25 +15,39 @@
  * limitations under the License.
  */
 package org.apache.dubbo.remoting;
+
 import org.apache.dubbo.rpc.model.ScopeModel;
 import org.apache.dubbo.rpc.model.ScopeModelUtil;
+
 public class Transporter$Adaptive implements org.apache.dubbo.remoting.Transporter {
-public org.apache.dubbo.remoting.Client connect(org.apache.dubbo.common.URL arg0, org.apache.dubbo.remoting.ChannelHandler arg1) throws org.apache.dubbo.remoting.RemotingException {
-if (arg0 == null) throw new IllegalArgumentException("url == null");
-org.apache.dubbo.common.URL url = arg0;
-String extName = url.getParameter("client", url.getParameter("transporter", "netty"));
-if(extName == null) throw new IllegalStateException("Failed to get extension (org.apache.dubbo.remoting.Transporter) name from url (" + url.toString() + ") use keys([client, transporter])");
-ScopeModel scopeModel = ScopeModelUtil.getOrDefault(url.getScopeModel(), org.apache.dubbo.remoting.Transporter.class);
-org.apache.dubbo.remoting.Transporter extension = (org.apache.dubbo.remoting.Transporter)scopeModel.getExtensionLoader(org.apache.dubbo.remoting.Transporter.class).getExtension(extName);
-return extension.connect(arg0, arg1);
-}
-public org.apache.dubbo.remoting.RemotingServer bind(org.apache.dubbo.common.URL arg0, org.apache.dubbo.remoting.ChannelHandler arg1) throws org.apache.dubbo.remoting.RemotingException {
-if (arg0 == null) throw new IllegalArgumentException("url == null");
-org.apache.dubbo.common.URL url = arg0;
-String extName = url.getParameter("server", url.getParameter("transporter", "netty"));
-if(extName == null) throw new IllegalStateException("Failed to get extension (org.apache.dubbo.remoting.Transporter) name from url (" + url.toString() + ") use keys([server, transporter])");
-ScopeModel scopeModel = ScopeModelUtil.getOrDefault(url.getScopeModel(), org.apache.dubbo.remoting.Transporter.class);
-org.apache.dubbo.remoting.Transporter extension = (org.apache.dubbo.remoting.Transporter)scopeModel.getExtensionLoader(org.apache.dubbo.remoting.Transporter.class).getExtension(extName);
-return extension.bind(arg0, arg1);
-}
+    public org.apache.dubbo.remoting.Client connect(org.apache.dubbo.common.URL arg0, org.apache.dubbo.remoting.ChannelHandler arg1) throws org.apache.dubbo.remoting.RemotingException {
+        if (arg0 == null) throw new IllegalArgumentException("url == null");
+        org.apache.dubbo.common.URL url = arg0;
+        String extName = url.getParameter("client", url.getParameter("transporter", "netty"));
+        if (extName == null)
+            throw new IllegalStateException("Failed to get extension (org.apache.dubbo.remoting.Transporter) name from url (" + url.toString() + ") use keys([client, transporter])");
+        ScopeModel scopeModel = ScopeModelUtil.getOrDefault(url.getScopeModel(), org.apache.dubbo.remoting.Transporter.class);
+        org.apache.dubbo.remoting.Transporter extension = (org.apache.dubbo.remoting.Transporter) scopeModel.getExtensionLoader(org.apache.dubbo.remoting.Transporter.class).getExtension(extName);
+        return extension.connect(arg0, arg1);
+    }
+
+    public org.apache.dubbo.remoting.RemotingServer bind(org.apache.dubbo.common.URL arg0, org.apache.dubbo.remoting.ChannelHandler arg1) throws org.apache.dubbo.remoting.RemotingException {
+        if (arg0 == null) throw new IllegalArgumentException("url == null");
+        org.apache.dubbo.common.URL url = arg0;
+        /**
+         * 问题： 这里从url中获取 transport参数，  Transport$Adaptive 类是动态生成的，他是怎么知道需要获取Transport参数，通过
+         * 这个Transport参数来确定使用哪个扩展接口实现类的？
+         * 这就是@Adaptive 实现的Dubbo 扩展点自适应功能。
+         *
+         */
+        String extName = url.getParameter("server", url.getParameter("transporter", "netty"));
+        if (extName == null)
+            throw new IllegalStateException("Failed to get extension (org.apache.dubbo.remoting.Transporter) name from url (" + url.toString() + ") use keys([server, transporter])");
+        ScopeModel scopeModel = ScopeModelUtil.getOrDefault(url.getScopeModel(), org.apache.dubbo.remoting.Transporter.class);
+        /**
+         * 根据url中指定的Transport参数获取指定的实现
+         */
+        org.apache.dubbo.remoting.Transporter extension = (org.apache.dubbo.remoting.Transporter) scopeModel.getExtensionLoader(org.apache.dubbo.remoting.Transporter.class).getExtension(extName);
+        return extension.bind(arg0, arg1);
+    }
 }

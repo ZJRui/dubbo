@@ -182,8 +182,11 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
          * 这里的registry就是ZookeeperRegistry，因此会执行zookeeperRegistery的subscribe方法
          * zookeeperRegistry继承自FailbackRegistry 因此追执行FailbackRegistry 的subscribe方法
          *
+         * 在第一次发起订阅时会进行一次数据拉取操作，同时触发RegistryDirectory.notify方法，这里的通知数据是某一个类别的全量数据，
+         *   比如Providers和routes类别数据。当通知Providers数据时，在RegistryDirectory#toInvokers方法内完成Invoker转换。
+         *
          */
-        registry.subscribe(url, this);
+        registry.subscribe(url, this);//执行FailBackRegistry的subscribe方法
     }
 
     public void unSubscribe(URL url) {

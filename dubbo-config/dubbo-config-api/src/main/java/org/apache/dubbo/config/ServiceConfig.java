@@ -405,11 +405,19 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
          * 这个ProtocolConfig被 设置到  registryUrl中，  registerUrl使用registry://开头， ExtensionLoader返回RegistryProtocol
          * RegistryProtocol对象的exprot方法中会根据ProtocolConfig中配置信息使用DubboProtocol。
          *
+         *----------------------------------
+         * Dubbo 支持多注册中心同时写，如果配置了服务同时注册多个注册中心，则会依次暴露
          *
          */
         List<URL> registryURLs = ConfigValidationUtils.loadRegistries(this, true);
 
-        //根据serviceConfig中配置的protocol，循环注册不同协议服务
+        /**
+         *
+         *  根据serviceConfig中配置的protocol，循环注册不同协议服务
+         *  Dubbo也支持相同服务暴露多个协议，比如同时暴露Dubbo 和rest协议，框架内部会一次对使用的协议做一次服务暴露，每个协议注册
+         *  元数据都会写入多个注册中心。
+         */
+
         for (ProtocolConfig protocolConfig : protocols) {
             String pathKey = URL.buildKey(getContextPath(protocolConfig)
                     .map(p -> p + "/" + path)
@@ -419,6 +427,9 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
                 // In case user specified path, register service one more time to map it to path.
                 repository.registerService(pathKey, interfaceClass);
             }
+            /**
+             * 真实对外暴露服务
+             */
             doExportUrlsFor1Protocol(protocolConfig, registryURLs);
         }
     }
@@ -629,6 +640,9 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
                 }
 
                 url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
+                /**
+                 * 如果配置了监控地址，则服务调用信息会上报，框架在拦截器中执行数据上报
+                 */
                 URL monitorUrl = ConfigValidationUtils.loadMonitor(this, registryURL);
                 if (monitorUrl != null) {
                     url = url.putAttribute(MONITOR_KEY, monitorUrl);
@@ -648,6 +662,10 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
                     }
                 }
 
+                /**
+                 * 通过动态代理转换为Invoker，registryUrl存储的是注册中心地址，下面putAttributes使用 export作为key 追加服务元数据信息
+                 *
+                 */
                 doExportUrl(registryURL.putAttribute(EXPORT_KEY, url), true);
             }
 
@@ -669,6 +687,19 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         /**
          * 这里的ref就是我们服务的实现类实例。
          * ProxyFactory就是扩展服务ProxyFactory的适配器类。
+         *
+         * 首先 将原始服务实现类转为Invoker，转为Invoker的主要作用就是Invoker负责对服务实现类进行调用 ，Invoker对外暴露的接口是 你只需要告诉我执行那个方法以及方法参数
+         *
+         * 然后再将Invoker转为Export，转为Exporter的作用是 提供对外通信的通道，比如DubboProtocol会开启NettyServer 对外提供监听，接收调用者的请求。触发服务暴露（端口打开等）
+         * RegistryProtocol会对服务元数据进行注册。
+         *
+         * 服务暴露与注册中心的关系：
+         * 有注册中心的情况：registry://host:port/com.alibaba.dubbo.registry.RegistryService?protocol=zookeeper&export=dubbo://ip:port/xxx?..。
+         * 没有注册中心的情况：dubbo://ip:host/xxx.Service?timeout=1000&..
+         *
+         * Protocol实例会自动根据服务暴露URL自动做适配，有注册中心场景会取出具体协议，比如Zookeeper，首先创建注册中心实例，然后取出expoort对应具体服务的url，
+         * 最后调用服务URl对应的协议（默认为dubbo）进行服务暴露，当服务暴露成功后把服务数据注册到Zookeeper。
+         *
          */
         Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
         if (withMetaData) {
@@ -684,6 +715,11 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
      */
     private void exportLocal(URL url) {
         URL local = URLBuilder.from(url)
+            /**
+             * 显示指定injvm协议进行暴露
+             * injvm协议不会做端口打开操作，仅仅把服务保存在内存中。
+             * InjvmProtocol中存储服务实例信息，export中直接返回InjvmExporter实例对象，构造函数内部会把当前Invoker加入到exporterMap中
+             */
                 .setProtocol(LOCAL_PROTOCOL)
                 .setHost(LOCALHOST_VALUE)
                 .setPort(0)

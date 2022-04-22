@@ -86,6 +86,9 @@ public class InjvmProtocol extends AbstractProtocol {
         /**
          * export 返回一个InjvmExporter对象 ，并将AbstractProtocol的exporterMap对象传递给InjvmExporter
          * 同时在InjvmExporter的构造器中 会将自身放入到 exporterMap中
+         *
+         * injvm协议不会做端口打开操作，仅仅把服务保存在内存中。
+         *
          */
         return new InjvmExporter<T>(invoker, invoker.getUrl().getServiceKey(), exporterMap);
     }

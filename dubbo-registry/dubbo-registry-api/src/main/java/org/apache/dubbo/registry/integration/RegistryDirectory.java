@@ -134,7 +134,8 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
         }
 
         /**
-         * 对不同类别的元数据进行分类
+         * 对不同类别的元数据进行分类.
+         * 消费端启动时，消费端会订阅providers、routers、configurators这三个目录，分别对应服务提供者、路由和动态配置变更通知。
          */
         Map<String, List<URL>> categoryUrls = urls.stream()
                 .filter(Objects::nonNull)
@@ -376,12 +377,18 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
         if (urls == null || urls.isEmpty()) {
             return newUrlInvokerMap;
         }
+
         String queryProtocols = this.queryMap.get(PROTOCOL_KEY);
         for (URL providerUrl : urls) {
             // If protocol is configured at the reference side, only the matching protocol is selected
             if (queryProtocols != null && queryProtocols.length() > 0) {
                 boolean accept = false;
                 String[] acceptProtocols = queryProtocols.split(",");
+                /**
+                 *
+                 * 根据消费方protocol配置过滤不匹配协议
+                 *
+                 */
                 for (String acceptProtocol : acceptProtocols) {
                     if (providerUrl.getProtocol().equals(acceptProtocol)) {
                         accept = true;
@@ -402,6 +409,9 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                     getUrl().getOrDefaultFrameworkModel().getExtensionLoader(Protocol.class).getSupportedExtensions()));
                 continue;
             }
+            /**
+             * 合并provider端配置数据，比如服务端ip和port等
+             */
             URL url = mergeUrl(providerUrl);
 
             // Cache key is url that does not merge with consumer side parameters, regardless of how the consumer combines parameters, if the server url changes, then refer again
@@ -418,6 +428,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                         /**
                          * 这里调用Dubbo协议转换服务到Invoker
                          * 这里protocol对象
+                         * 在ProtocolFilterWrapper refer中触发链式构造
                          */
                         invoker = protocol.refer(serviceType, url);
                     }

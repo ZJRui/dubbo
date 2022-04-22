@@ -384,8 +384,9 @@ public class DubboProtocol extends AbstractProtocol {
 
         /**
          * Inovker到Exporter的转换
+         *
+         * 根据服务分组、版本、服务接口和暴露端口作为key用于关联具体服务Invoker
          */
-        // export service.
         String key = serviceKey(url);
         /*
          *  那么问题 就是 Invoker对象的invoke方法 何时被调用？ 也就是什么时候在哪里收到  触发Invoker的invoke执行
@@ -449,6 +450,9 @@ public class DubboProtocol extends AbstractProtocol {
         if (isServer) {
             /**
              * key 是ipport，因此只会创建一个nettyServer
+             *
+             * 同一个协议暴露有很多接口，只有初次暴露的接口才需要打开端口监听
+             *
              */
             ProtocolServer server = serverMap.get(key);
             if (server == null) {

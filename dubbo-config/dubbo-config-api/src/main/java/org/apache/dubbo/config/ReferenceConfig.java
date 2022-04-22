@@ -393,10 +393,13 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
     @SuppressWarnings({"unchecked"})
     private T createProxy(Map<String, String> referenceParameters) {
         /**
-         * 是否需要打开本地引用
+         * 是否需要打开本地引用:是否在同一个JVM中包含要消费的服务，默认场景下，Dubbo会通过找出内存中injvm协议的服务，这些服务实例都放在了内存中，消费也是直接获取实例调用
+         *
          *
          * 如果在消费端没有指定scope类型，则启动时会检查是否有导出的服务，如果有则自动开启本地引用。 也就是将协议类型改为injvm
          *
+         * 也就是先创建一个NettyClient，然后NettyClient封装成Invoker。通过执行Invoker的方法将 方法调用请求 发送出去。
+         * 然后Invoker又被封装成代理对象.业务层使用代理对象
          *
          */
         if (shouldJvmRefer(referenceParameters)) {
@@ -407,6 +410,8 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                 // user specified URL, could be peer-to-peer address, or register center's address.
                 /**
                  * 用户是否制定服务提供方地址：可以是服务提供方ip地址（直连方式）
+                 *
+                 * 在注册中心地址后添加refer存储服务消费元数据信息 也就值 registry://xxxx ?refer=xxxx
                  */
                 parseUrl(referenceParameters);
             } else {
@@ -528,6 +533,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                 url = url.setScopeModel(getScopeModel());
                 url = url.setServiceModel(consumerModel);
                 if (UrlUtils.isRegistry(url)) {
+                    /**
+                     * 注册中心地址后添加refer存储服务 消费元数据信息
+                     */
                     urls.add(url.putAttribute(REFER_KEY, referenceParameters));
                 } else {
                     URL peerUrl = getScopeModel().getApplicationModel().getBeanFactory().getBean(ClusterUtils.class).mergeUrl(url, referenceParameters);
@@ -598,6 +606,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
              */
 
             invoker = protocolSPI.refer(interfaceClass, curUrl);
+            /**
+             * URL是否是 registryurl，url中没有注册中心协议，默认dubbo会直接出发DubboProtocol进行远程消费，不经过RegistryProtocol去做服务发现。
+             */
             if (!UrlUtils.isRegistry(curUrl)) {
                 List<Invoker<?>> invokers = new ArrayList<>();
                 invokers.add(invoker);
@@ -609,8 +620,18 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
             for (URL url : urls) {
                 // For multi-registry scenarios, it is not checked whether each referInvoker is available.
                 // Because this invoker may become available later.
+                /**
+                 *
+                 * Dubbo 支持多注册中心同时消费，如果配置了服务同时注册多个注册中心，则会在下面将每一个注册中心对应的Invoker合并成一个Invoker。
+                 *
+                 * 逐个获取注册中心服务，并添加到invokers列表
+                 *
+                 */
                 invokers.add(protocolSPI.refer(interfaceClass, url));
 
+                /**
+                 * URL是否是 registryurl，url中没有注册中心协议，默认dubbo会直接出发DubboProtocol进行远程消费，不经过RegistryProtocol去做服务发现。
+                 */
                 if (UrlUtils.isRegistry(url)) {
                     // use last registry url
                     registryUrl = url;
@@ -623,6 +644,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                 String cluster = registryUrl.getParameter(CLUSTER_KEY, ZoneAwareCluster.NAME);
                 // The invoker wrap sequence would be: ZoneAwareClusterInvoker(StaticDirectory) -> FailoverClusterInvoker
                 // (RegistryDirectory, routing happens here) -> Invoker
+                /**
+                 * 通过cluster将多个Invoker转换成一个Invoker，最终将Invoker转为接口代理（ProxyFactory.getProxy(invoker)）
+                 */
                 invoker = Cluster.getCluster(registryUrl.getScopeModel(), cluster, false).join(new StaticDirectory(registryUrl, invokers), false);
             } else {
                 // not a registry url, must be direct invoke.

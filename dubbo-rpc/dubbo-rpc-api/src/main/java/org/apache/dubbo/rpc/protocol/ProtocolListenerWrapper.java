@@ -60,9 +60,28 @@ public class ProtocolListenerWrapper implements Protocol {
 
     @Override
     public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        /**
+         * 如果是注册中心的url则直接跳过。 这是什么意思呢？
+         *
+         * RegistryProtocol  DubboProtocol都是protocol，ProtocolListenerWrapper 都会对这两个Protocol进行wrapper
+         * 当RegistryProtocol和DubboProtocol的export方法执行之前都会先执行ProtocolListenerWrapper的export
+         * 但是从这里我们 看到ProtocolListenerWrapper对 RegistryProtocol没有 做什么特别的处理，而是直接跳过了
+         */
         if (UrlUtils.isRegistry(invoker.getUrl())) {
             return protocol.export(invoker);
         }
+        /**
+         *
+         * 在服务暴露前（比如RegistryProtocol的export执行前）
+         * ProtocolListenerWrapper实现中 在对服务提供者进行暴露时回调对应的监听方法
+         *
+         * 因为协议的包装顺序是 ProtocolListenerWrapper包装了协议实现类DubboProtocol。然后ProtocolFilterWrapper包装了ProtocolListenerWrapper
+         *
+         * 因此在执行export的时候先 执行ProtocolFIlterWrapper.export ，ProtocolFilterWrapper会调用 ProtocolListenerWrapper的export方法。
+         *
+         *
+         *
+         */
         return new ListenerExporterWrapper<T>(protocol.export(invoker),
                 Collections.unmodifiableList(ScopeModelUtil.getExtensionLoader(ExporterListener.class, invoker.getUrl().getScopeModel())
                         .getActivateExtension(invoker.getUrl(), EXPORTER_LISTENER_KEY)));
@@ -70,6 +89,13 @@ public class ProtocolListenerWrapper implements Protocol {
 
     @Override
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        /**
+         * 如果是注册中心的url则直接跳过。 这是什么意思呢？
+         *
+         * RegistryProtocol  DubboProtocol都是protocol，ProtocolListenerWrapper 都会对这两个Protocol进行wrapper
+         * 当RegistryProtocol和DubboProtocol的export方法执行之前都会先执行ProtocolListenerWrapper的export
+         * 但是从这里我们 看到ProtocolListenerWrapper对 RegistryProtocol没有 做什么特别的处理，而是直接跳过了
+         */
         if (UrlUtils.isRegistry(url)) {
             return protocol.refer(type, url);
         }
