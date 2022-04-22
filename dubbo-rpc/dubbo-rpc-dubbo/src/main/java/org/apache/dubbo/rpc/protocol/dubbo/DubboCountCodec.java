@@ -53,10 +53,21 @@ public final class DubboCountCodec implements Codec2 {
         MultiMessage result = MultiMessage.create();
         do {
             Object obj = codec.decode(channel, buffer);
+            /**
+             * 如果返回了 need_more_input则说明遇到了半包，此时将message的读取下标重置为保存的saveReaderIndex，然后退出循环。
+             * 否则说明解析出来了一个完整的Dubbo协议帧，并保存到result，然后如果message还可读则再次循环。
+             *
+             * 如果返回needMore input 这说明遇到了半包问题，数据不足以支撑一个完整的dubbo协议帧，此时通过虚幻继续累加数据知道有至少一个完整协议帧。
+             *
+             *
+             */
             if (Codec2.DecodeResult.NEED_MORE_INPUT == obj) {
                 buffer.readerIndex(save);
                 break;
             } else {
+                /**
+                 *
+                 */
                 result.addMessage(obj);
                 logMessageLength(obj, buffer.readerIndex() - save);
                 save = buffer.readerIndex();

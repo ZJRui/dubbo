@@ -222,13 +222,19 @@ public class ExchangeCodec extends TelnetCodec {
     }
 
     protected void encodeRequest(Channel channel, ChannelBuffer buffer, Request req) throws IOException {
+        /**
+         * 获取序列化扩展实现，默认为hession序列化方式
+         */
         Serialization serialization = getSerialization(channel, req);
+        /**
+         * 创建dubbo协议扩展头字节数组，HEADER_LENGTH16
+         */
         // header.
         byte[] header = new byte[HEADER_LENGTH];
-        // set magic number.
+        // set magic number.  将魔数写入协议头
         Bytes.short2bytes(MAGIC, header);
 
-        // set request and serialization flag.
+        // set request and serialization flag.  设置请求类型与序列化类型，标记到协议头
         header[2] = (byte) (FLAG_REQUEST | serialization.getContentTypeId());
 
         if (req.isTwoWay()) {
@@ -238,10 +244,10 @@ public class ExchangeCodec extends TelnetCodec {
             header[2] |= FLAG_EVENT;
         }
 
-        // set request id.
+        // set request id.   将请求id设置到协议头
         Bytes.long2bytes(req.getId(), header, 4);
 
-        // encode request data.
+        // encode request data. 使用获取的序列化方式对数据部分进行编码，并把协议数据部分写入缓存
         int savedWriteIndex = buffer.writerIndex();
         buffer.writerIndex(savedWriteIndex + HEADER_LENGTH);
         ChannelBufferOutputStream bos = new ChannelBufferOutputStream(buffer);
@@ -262,13 +268,14 @@ public class ExchangeCodec extends TelnetCodec {
             }
         }
 
+        //刷新缓存
         bos.flush();
         bos.close();
         int len = bos.writtenBytes();
         checkPayload(channel, len);
         Bytes.int2bytes(len, header, 12);
 
-        // write
+        // write 将协议头写入缓存
         buffer.writerIndex(savedWriteIndex);
         buffer.writeBytes(header); // write header.
         buffer.writerIndex(savedWriteIndex + HEADER_LENGTH + len);

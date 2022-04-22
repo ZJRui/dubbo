@@ -32,6 +32,9 @@ import java.util.List;
 @Adaptive
 public class AdaptiveExtensionInjector implements ExtensionInjector, Lifecycle {
 
+    /**
+     * 工厂列表也是通过SPI实现的，因此可以在这里获取所有工厂的扩展点加载器
+     */
     private List<ExtensionInjector> injectors = Collections.emptyList();
 
     private ExtensionAccessor extensionAccessor;
@@ -46,6 +49,9 @@ public class AdaptiveExtensionInjector implements ExtensionInjector, Lifecycle {
 
     @Override
     public void initialize() throws IllegalStateException {
+        /**
+         * 工厂列表也是通过SPI实现的，因此可以在这里获取所有工厂的扩展点加载器
+         */
         ExtensionLoader<ExtensionInjector> loader = extensionAccessor.getExtensionLoader(ExtensionInjector.class);
         List<ExtensionInjector> list = new ArrayList<ExtensionInjector>();
         for (String name : loader.getSupportedExtensions()) {
@@ -56,6 +62,11 @@ public class AdaptiveExtensionInjector implements ExtensionInjector, Lifecycle {
 
     @Override
     public <T> T getInstance(Class<T> type, String name) {
+        /**
+         * AdaptiveExtensionInjector持有了所有的具体工厂实现。
+         * SPIInjector排在前面，SpringInjector排在后面。 先从SPI容器中获取扩展类，然后再从SPring容器中查找。
+         *
+         */
         for (ExtensionInjector injector : injectors) {
             T extension = injector.getInstance(type, name);
             if (extension != null) {

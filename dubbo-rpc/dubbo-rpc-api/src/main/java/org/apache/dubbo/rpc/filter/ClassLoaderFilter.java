@@ -36,6 +36,31 @@ public class ClassLoaderFilter implements Filter, BaseFilter.Listener {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        /**
+         * 如果读者对Java的类加载机制不清楚的话，那么会感觉ClassLoaderFilter过滤器不好理解。
+         * ClassLoaderFilter主要的工作是：切换当前工作线程的类加载器到接口的类加载器，以便和接口
+         * 的类加载器的上下文一起工作。
+         *
+         * 。我们先了解一下双亲委派模型在框架中会有哪些问题,在 ClassA 中通过反射调用了 ClassB.
+         * 如果ClassA和ClassB都是同一个类加载器加载的，则它们之间是可以互相访问的，ClassA
+         * 的调用会输出ClassBo但是，如果ClassA和ClassB是同一层级不同的类加载器加载的呢？
+         * 假设ClassA由ClassLoaderA加载，ClassB由ClassLoaderB加载，此时ClassA是无法访问
+         * ClassB的。我们按照双亲委派模型来获取一下ClassB：首先，ClassA会从ClassLoaderA中查找
+         * ClassB,看是否已经加载。没找到则继续往父类加载器ParentClassLoader查找ClassB,没找到
+         * 则继续往父类加载器查找 最终还没找到，会抛出ClassNotFoundException异常。
+         *
+         * 讲了这么多，和ClassLoaderFilter有什么关系呢？如果要实现违反双亲委派模型来查找
+         * Class,那么通常会使用上下文类加载器(ContextClassLoader)。当前框架线程的类加载器可能
+         * 和Invoker接口的类加载器不是同一个，而当前框架线程中又需要获取Invoker的类加载器中的
+         * 一些 Class,为 了避免出现 ClassNot Found Exception,此时只需要使用 Thread. currentThread().
+         * getContextClassLoader()就可以获取Invoker的类加载器，进而获得这个类加载器中的Classo
+         *
+         * 常见的使用例子有DubboProtocol#optimizeSerialization方法，会根据Invoker中配置的
+         * optimizer参数获取扩展的自定义序列化处理类，这些外部引入的序列化类在框架的类加载器
+         * 中肯定没有，因此需要使用Invoker的类加载器获取对应的类。
+         *
+         *
+         */
         ClassLoader stagedClassLoader = Thread.currentThread().getContextClassLoader();
         ClassLoader effectiveClassLoader;
         if (invocation.getServiceModel() != null) {

@@ -85,6 +85,12 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
              *
              * 然后 为 C Filter创建一个 CopyOfFilterChainNode ，这个Node的next 是  D_CopyOfFilterChainNode,filter是CFilter
              *
+             *-----------------------
+             * 源码中为什么要倒排遍历呢？因为是通过从里到外构造匿名类的方式构造Invoker的，所以
+             * 只有倒排，最外层的Invoker才能是第一个过滤器。我们来看一个例子：
+             * 假设有过滤器A、B、C和Invoker,会按照C、B、A倒序遍历，过滤器链构建顺序为：
+             * C—Invoker, B—C—Invoker, A—B—C—Invoker。最终调用时的顺序就会变为A是第一个过
+             * 滤器。
              *
              */
             for (int i = filters.size() - 1; i >= 0; i--) {

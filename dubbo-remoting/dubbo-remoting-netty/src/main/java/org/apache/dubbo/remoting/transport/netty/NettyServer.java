@@ -135,6 +135,9 @@ public class NettyServer extends AbstractServer implements RemotingServer {
         bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
             @Override
             public ChannelPipeline getPipeline() {
+                /**
+                 * 消费端启动时，NettyCodecAdapter管理的编解码器被设置到Netty链接的channle管线里。
+                 */
                 NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyServer.this);
                 ChannelPipeline pipeline = Channels.pipeline();
                 /*int idleTimeout = getIdleTimeout();

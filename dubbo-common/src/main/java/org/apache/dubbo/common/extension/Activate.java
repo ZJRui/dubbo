@@ -35,6 +35,7 @@ import java.lang.annotation.Target;
  * SPI provider can call {@link ExtensionLoader#getActivateExtension(URL, String, String)} to find out all activated
  * extensions with the given criteria.
  *
+ * @author lenovo
  * @see SPI
  * @see URL
  * @see ExtensionLoader
@@ -43,6 +44,11 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface Activate {
+    /**
+     * @Activate 注解可以标记在类、接口、方法上，主要使用在有多个扩展点实现、需要根据不同条件被激活的场景中。 如filter需要
+     * 多个同时激活，因为每个Filter实现的是不同的功能。
+     *
+     */
     /**
      * Activate the current extension when one of the groups matches. The group passed into
      * {@link ExtensionLoader#getActivateExtension(URL, String, String)} will be used for matching.

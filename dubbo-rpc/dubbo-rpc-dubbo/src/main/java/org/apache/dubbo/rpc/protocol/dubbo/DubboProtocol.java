@@ -220,6 +220,7 @@ public class DubboProtocol extends AbstractProtocol {
 
         @Override
         public void received(Channel channel, Object message) throws RemotingException {
+
             if (message instanceof Invocation) {
                 reply((ExchangeChannel) channel, message);
 

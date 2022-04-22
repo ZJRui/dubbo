@@ -673,6 +673,12 @@ public class RegistryProtocol implements Protocol, ScopeModelAware {
          * 这里的URL其实是注册中心地址，真实消费方的元数据信息是放在refer属性中存储的
          *
          * RegistryDirectory实现了NotifyListener接口，服务变更会触发这个类回调notify方法，用于重新引用服务。
+         *
+         *客户端启动的时候会从注册中心拉取和订阅对应的服务列表，Cluster会把拉取到服务列表聚合成一个Invoker。每次RPC调用前
+         * 会通多负载均衡从服务列表中选择一个Invoker。 框架内部的实现Directory接口是RegistryDirectory，他和
+         * 接口名是一对一的关系 ，每一个接口都有一个RegistryDirectory实例，主要负责拉取和订阅服务提供者、动态配置和路由项
+         *
+         *
          */
         DynamicDirectory<T> directory = new RegistryDirectory<>(type, url);
         return doCreateInvoker(directory, cluster, registry, type);

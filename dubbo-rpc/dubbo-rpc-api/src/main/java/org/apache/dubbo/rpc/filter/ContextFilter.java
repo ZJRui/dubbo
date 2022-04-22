@@ -81,6 +81,29 @@ public class ContextFilter implements Filter, Filter.Listener {
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
         /**
+         * ContextFilter主要记录每个请求的调用上下文。每个调用都有可能产生很多中间临时信息，
+         * 我们不可能要求在每个接口上都加一个上下文的参数，然后一路往下传。通常做法都是放在
+         * ThreadLocal中，作为一个全局参数，当前线程中的任何一个地方都可以直接读/写上下文信息。
+         * ContextFilter就是统一在过滤器中处理请求的上下文信息，它为每个请求维护一个
+         * RpcContext对象，该对象中维护两个InternalThreadLocal (它是优化过的ThreadLocal,具体
+         * 可以搜索Netty的InternalThreadLocal做了什么优化)，分别记录local和server的上下文。每次
+         * 收到或发起RPC调用的时候，上下文信息都会发生改变。例如：A调用B, B调用C。当A调
+         * 用B且B还未调用C时，RpcContext中保存A调用B的上下文；当B开始调用C的时候，
+         * RpcContext中保存B调用C的上下文。发起调用时候的上下文是由ConsumerContextFilter实现
+         * 的，这个是消费者端的过滤器，因此不在本节讲解oContextFilter保存的是收到的请求的上下文。
+         *
+         * ContextFilter的主要逻辑如下：
+         * (1)  清除异步属性。防止异步属性传到过滤器链的下一个环节。
+         * (2)  设置当前请求的上下文，如Invoker信息、地址信息、端口信息等。如果前面的过滤
+         * 器已经对上下文设置了一些附件信息(attachments是一个Map,里面可以保存各种key-value
+         * 数据)，则和Invoker的附件信息合并。
+         * (3)  调用过滤器链的下一个节点。
+         * (4)  清除上下文信息。对于异步调用的场景，即使是同一个线程，处理不同的请求也会创
+         * 建一个新的RpcContext对象。因此调用完成后，需要清理对应的上下文信息。
+         *
+         *
+         *
+         * ---------------------
          * 服务提供方使用contextFilter 对请求进行拦截，并从RpcInvocation中获取attachments中的键值对，然后使用
          * RpcContext.getContext().setAttachment 设置到上下文对象中。
          *

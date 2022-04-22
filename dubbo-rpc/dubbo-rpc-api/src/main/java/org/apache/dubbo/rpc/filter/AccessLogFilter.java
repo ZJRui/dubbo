@@ -117,6 +117,14 @@ public class AccessLogFilter implements Filter {
     private void log(String accessLog, AccessLogData accessLogData) {
         Set<AccessLogData> logSet = logEntries.computeIfAbsent(accessLog, k -> new ConcurrentHashSet<>());
 
+        /**
+         * 日志打印。如果用户配置了使用应用本身的日志组件，则直接通过封装的
+         * LoggerFactory打印日志；如果用户配置了日志要输出到自定义的文件中，则会把日志加入一
+         * 个 ConcurrentMap<String^ ConcurrentHashSet<String>>中暂存，key 是自定义的 accesslog 值
+         * （如accesslogicustom-access.log”），value就是对应的日志集合。后续等待定时线程不断遍历
+         * 整个Map,把日志写入对应的文件。
+         *
+         */
         if (logSet.size() < LOG_MAX_BUFFER) {
             logSet.add(accessLogData);
         } else {

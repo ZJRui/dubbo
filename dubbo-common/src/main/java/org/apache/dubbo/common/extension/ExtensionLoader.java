@@ -81,6 +81,12 @@ public class ExtensionLoader<T> {
      * <p>
      * 在DubboBootstrap类的静态newInstance方法中会 创建ExtensionDirector对象，这个ExtensionDirector 对象中
      * 会缓存扩展接口与对应的ExtensionLoader的映射。
+     *
+     * getExtension: 获取普通扩展类
+     * getAdaptiveExtension：获取自适应扩展类
+     * getActivateExtension：获取自动激活的扩展类
+     *
+     *
      */
 
     private static final Logger logger = LoggerFactory.getLogger(ExtensionLoader.class);
@@ -534,6 +540,9 @@ public class ExtensionLoader<T> {
         if (StringUtils.isEmpty(name)) {
             throw new IllegalArgumentException("Extension name == null");
         }
+        /**
+         * 如果getExtension 传入的那么是true则加载并返回默认的扩展类
+         */
         if ("true".equals(name)) {
             return getDefaultExtension();
         }
@@ -702,6 +711,10 @@ public class ExtensionLoader<T> {
         /**
          * protocolSPI = this.getExtensionLoader(Protocol.class).getAdaptiveExtension();
          *
+         * getExtension: 获取普通扩展类
+         * getAdaptiveExtension：获取自适应扩展类
+         * getActivateExtension：获取自动激活的扩展类
+         *
          */
         checkDestroyed();
         Object instance = cachedAdaptiveInstance.get();
@@ -791,6 +804,9 @@ public class ExtensionLoader<T> {
              */
             T instance = (T) extensionInstances.get(clazz);
             if (instance == null) {
+                /**
+                 * 这里 putIfAbsent 中指定如果没有 则执行 createExtensionInstance方法创建
+                 */
                 extensionInstances.putIfAbsent(clazz, createExtensionInstance(clazz));
                 instance = (T) extensionInstances.get(clazz);
                 instance = postProcessBeforeInitialization(instance, name);
@@ -809,6 +825,11 @@ public class ExtensionLoader<T> {
                  * @Adaptive传入了两个 Constants中的参数，server和transport。当外部调用Transport.bind 方法时，会动态从传入的参数URL中提取key参数 server的value
                  * 值，如果能匹配上某个扩展实现类则直接使用对应的实现类。如果未匹配上，则继续通过第二个key参数 transport 提取value值。 如果都没匹配上，则抛出异常。也就是
                  * 说如果@Adaptive中传入了多个参数，则一次进行实现类的匹配，直到最后抛出异常。
+                 *
+                 * -----------------------------
+                 * 在SPIExtensionInjector的getInstance实现中 通过getAdaptiveExtension 返回cachedAdaptiveInstance 也就是扩展点自适应类。
+                 * 比如说RegistryProtocol 这个类中有一个setProtocol方法,RegistryProtocol 有一个Protocol protocol属性
+                 * 那么RegistryProtocol对象创建的时候注入的Protocol属性就是 Protocol$Adaptive 扩展点自适应类。
                  *
                  */
                 injectExtension(instance);
@@ -953,10 +974,24 @@ public class ExtensionLoader<T> {
                     /**
                      * 查看set方法设置的变量是不是有扩展接口实现
                      * step1获取set方法对应的属性名
+                     *
+                     *
+                     * 注意这个getProperty方法， 比如 RegistryProtocol中有一个Protocol protocol属性。
+                     * 这个属性的名称是protocol，也可以是dubbo这样一个名称。
+                     * 不同的属性名称 我们获取 属性的实现类的时候 使用不同的策略会有不同的结果。
+                     * 在SPIExtensionInjector的实现中是 获取 扩展接口的 Adaptive作为 实现类，因此不管属性是 protocol还是dubbo 这两个名称的结果都是一样的。
+                     *
+                     * 在ScopeBeanExtensionInjector 的实现中 会根据属性的名称作为Bean的name获取对应的实现， 因此dubbo获取到的就是DubboProtocol，而protocol这个
+                     * 属性名称获取不到任何值。
+                     *
                      */
                     String property = getSetterProperty(method);
+
                     /**
-                     * 查看该属性类似是否存在扩展实现
+                     * 在SPIExtensionInjector的getInstance实现中 通过getAdaptiveExtension 返回cachedAdaptiveInstance 也就是扩展点自适应类。
+                     * 比如说RegistryProtocol 这个类中有一个setProtocol方法,RegistryProtocol 有一个Protocol protocol属性
+                     * 那么RegistryProtocol对象创建的时候注入的Protocol属性就是 Protocol$Adaptive 扩展点自适应类。
+                     *
                      */
                     Object object = injector.getInstance(pt, property);
                     if (object != null) {
@@ -1241,6 +1276,8 @@ public class ExtensionLoader<T> {
         /**
          * 如果是适配器类，则调用cacheAdaptiveClass
          *
+         * 如果是自适应类 Adaptive ，则缓存在cachedAdaptiveClass
+         *
          */
         if (clazz.isAnnotationPresent(Adaptive.class)) {
             cacheAdaptiveClass(clazz, overridden);
@@ -1250,6 +1287,8 @@ public class ExtensionLoader<T> {
              * ProtocolFilterWrapper 这个类就是一个wrapper类
              * 他在 dubbo/internal/org.apache.dubbo.rpc.Protocol文件中配置了
              * filter=org.apache.dubbo.rpc.cluster.filter.ProtocolFilterWrapper
+             *
+             * 如果是包装扩展类Wrapper则直接加入包装扩展类的set集合
              */
             cacheWrapperClass(clazz);
         } else {
@@ -1263,8 +1302,15 @@ public class ExtensionLoader<T> {
 
             String[] names = NAME_SEPARATOR.split(name);
             if (ArrayUtils.isNotEmpty(names)) {
+                /**
+                 * 如果有自动激活注解@Activate，则缓存到自动激活的缓存中
+                 */
                 cacheActivateClass(clazz, names[0]);
                 for (String n : names) {
+                    /**
+                     * 不是自适应类型，也不是包装类型，剩下的就是普通扩展类，也缓存起来。
+                     * 自动激活也是普通扩展类的一种，只是会根据不同的条件同时激活罢了。
+                     */
                     cacheName(clazz, n);
                     //保存扩展点的实现类
                     saveInExtensionClass(extensionClasses, clazz, n, overridden);

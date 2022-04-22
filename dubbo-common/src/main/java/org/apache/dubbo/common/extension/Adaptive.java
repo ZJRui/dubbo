@@ -93,6 +93,20 @@ public @interface Adaptive {
      * 把实例缓存到cachedAdaptiveInstance中。
      * 如果注解在接口方法上，则会根据参数，动态获得扩展点的实现是，生成Adaptive类，再缓存到cachedAdaptiveInstance中。
      *
+     *
+     * ============================
+     * 注意：  如果 Transport的bind方法 上的@Adaptive注解没有传入key参数，则默认会把类名转为key。 如扩展类命是SimpleExt，会转化为 simple.ext
+     * 扩展类名是transport，则会转为transport。然后在url中根据这个key 获取对应的扩展点的实现名称。
+     *   @Adaptive()
+     *   RemotingServer bind(URL url, ChannelHandler handler) throws RemotingException;
+     *
+     *   Transport$Adaptive的bind方法中会如下  String extName=url.getParameter("transport","defaultValue")//这个defaultValue是 Transport的SPI注解中指定的值
+     *   Tansport res= ExtensionLaoder.getExtensionLoader(Transport.class).getExtension(extname)
+
+     *   针对SimpleExt接口就是：String extName = url.getParameter("simple.ext""impll");
+     *
+     *
+     *
      */
 
 

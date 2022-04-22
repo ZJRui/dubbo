@@ -75,8 +75,29 @@ final class NettyCodecAdapter {
     @Sharable
     private class InternalEncoder extends OneToOneEncoder {
 
+        /**
+         *
+         * @param ctx
+         * @param ch
+         * @param msg
+         * @return
+         * @throws Exception
+         */
         @Override
         protected Object encode(ChannelHandlerContext ctx, Channel ch, Object msg) throws Exception {
+            /**
+             * Netty异步的写入时序
+             *
+             * AbstractChannelHandlerContext$WriteAndFlushTask的run方法-->ChannelHandlerContext.write--->NettyCodecAdapter$InternalEncoder
+             * ---->DubboCodec.encodeRequest
+             *
+             * 在Netty中，每个Channel(NioSocketChannel)与NioEventLoopGroup中的某一个NioEventLoop固定关联，业务线程就是异步地把请求转为任务，并写入与当前
+             * Channel关联的NioEventLoop内部管理的异步队列中。然后NioEventLoop关联的线程就会异步执行任务将请求发送出去。
+             *
+             * NioEventLoop关联的线程会把请求任务进行传递，即传递给该channel管理的管线中的每个handler，其中一个handler就是编解码处理器。
+             *
+             *
+             */
             org.apache.dubbo.remoting.buffer.ChannelBuffer buffer =
                     org.apache.dubbo.remoting.buffer.ChannelBuffers.dynamicBuffer(1024);
             NettyChannel channel = NettyChannel.getOrAddChannel(ch, url, handler);
@@ -96,6 +117,12 @@ final class NettyCodecAdapter {
 
         @Override
         public void messageReceived(ChannelHandlerContext ctx, MessageEvent event) throws Exception {
+            /**
+             * Netty 中，每个channel NioSocketChannel与NioEventLoopGroup中的某一个NioEventLoop固定关联，NettyServer会为每个接收
+             * 的链接创建一个Channel对象，这个channel对象也会与Worker NioEventLoopGroup中的某一个NioEventLoop固定关联。
+             * NioEventLoop会管理一个Selector对象和一个线程，线程会不断检查注册到该Selector对象撒花姑娘的Channel是否有读取事件，如果有
+             * 则从Tcp缓存读取数据
+             */
             Object o = event.getMessage();
             if (!(o instanceof ChannelBuffer)) {
                 ctx.sendUpstream(event);
