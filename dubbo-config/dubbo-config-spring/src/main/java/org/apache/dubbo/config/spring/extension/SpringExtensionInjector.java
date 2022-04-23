@@ -41,6 +41,37 @@ public class SpringExtensionInjector implements ExtensionInjector, Lifecycle {
 
     @Deprecated
     public static void addApplicationContext(ApplicationContext context) {
+        /**
+         * 关于这个方法 为什么被关闭参考 https://zhuanlan.zhihu.com/p/378320838
+         * Dubbo启动时注册JVM钩子函数，完成优雅停机。如果用户使用kill -9 pid 强制关闭指令，是不会执行优雅停机的，只有通过kill pid才会执行。
+         *
+         *
+         * 应用在停机时，接收到关闭通知时，会先把自己标记为不接受（发起）新请求，然后再等待10s（默认是10秒）的时候，等执行中的线程执行完。
+         *
+         * 那么，之所以他能做这些事，是因为从操作系统、到JVM、到Spring等都对优雅停机做了很好的支持。
+         *
+         * 关于Dubbo各个版本中具体是如何借助JVM的shutdown hook机制、或者说Spring的事件机制的优雅停机，我的一位同事的一篇文章介绍的很清晰，大家可以看下：
+         *
+         * https://www.cnkirito.moe/dubbo-gracefully-shutdown/
+         *
+         * 在从Dubbo 2.5 到 Dubbo 2.7介绍了历史版本中，Dubbo为了解决优雅上下线问题所遇到的问题和方案。
+         *
+         * 目前，Dubbo中实现方式如下，同样是用到了Spring的事件机制：
+         *
+         * public class SpringExtensionFactory implements ExtensionFactory {
+         *     public static void addApplicationContext(ApplicationContext context) {
+         *         CONTEXTS.add(context);
+         *         if (context instanceof ConfigurableApplicationContext) {
+         *             ((ConfigurableApplicationContext) context).registerShutdownHook();
+         *             DubboShutdownHook.getDubboShutdownHook().unregister();
+         *         }
+         *         BeanFactoryUtils.addApplicationListener(context, SHUTDOWN_HOOK_LISTENER);
+         *     }
+         * }
+         *
+         *
+         *
+         */
 //        CONTEXTS.add(context);
 //        if (context instanceof ConfigurableApplicationContext) {
 //            ((ConfigurableApplicationContext) context).registerShutdownHook();

@@ -57,6 +57,17 @@ public class JavassistProxyFactory extends AbstractProxyFactory {
              * InvokerInvocationHandler.invoker--->MockClusterInvoker.invoke----->FailoverClusterInvoker.doInvoke.select.doSelect.invoke
              * ------> InvokeDelegete.invoke ---->ProtocolFilterWrapper.invoke---> 进入Filter责任链  ActiveLimitFilter.invoke--->dubboInvoker.doInver
              *
+             *----------------------------------
+             *问题 JavassistProxyFactory和JDKProxyFactory的getProxy有什么区别
+             *
+             *         // Proxy#getProxy 返回 Proxy对象
+             *         // 在调用newInstance方法传入 invoker【被代理对象】
+             *         // 【重点】生成具体代理对象【具体代理类的 ClassType 不是 org.apache.dubbo.common.bytecode.Proxy】
+             *
+             * 下面的 Proxy.getProxy(interfaces) 是通过了字节码技术动态生成了一个接口的实现类字节码，而且这个生成的实现类有一个接收
+             * InvocationHandler类型参数的构造器，newInstance方法就是通过反射 调用这个构造器 实际创建了一个接口实现类对象。
+             * 在这个接口实现类对象的接口方法中 会调用这个接口实现类持有的InvocationHandler的方法。
+             * Javassist是一个开源的分析、编辑和创建Java字节码的类库
              *
              *
              */
