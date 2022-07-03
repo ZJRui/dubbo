@@ -44,6 +44,18 @@ import static org.springframework.util.ObjectUtils.nullSafeEquals;
  */
 @Deprecated
 public class DubboBootstrapApplicationListener implements ApplicationListener, ApplicationContextAware, Ordered {
+    /**
+     * 这个类在没有舍弃的时候是是通过 一个BeanDefinitionRegistryPostProcessor ，这个BeanDefinitionRegistryPostProcessor是BeanFactoryPostProcessor的
+     * 子接口
+     * org.apache.dubbo.config.spring.beans.factory.annotation.ServiceClassPostProcessor#postProcessBeanDefinitionRegistry
+     * 中注册一个BeanDefinition ,指定classType为 当前的DubboBootstrapApplicationListener 实现 启动DubboBootstrap
+     *
+     * 而这个ServiceClassPostProcessor 是DubboAutoConfiguration 中  @Bean注入的 ，在2.7版本中ServiceClassPostProcessor 还是存在的
+     * 后面3.0版本中ServiceClassPostProcessor 就被舍弃了。
+     *
+     *
+     *
+     */
 
     /**
      * The bean name of {@link DubboBootstrapApplicationListener}

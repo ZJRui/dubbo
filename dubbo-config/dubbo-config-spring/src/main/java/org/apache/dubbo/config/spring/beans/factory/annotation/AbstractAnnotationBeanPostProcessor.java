@@ -18,18 +18,18 @@ package org.apache.dubbo.config.spring.beans.factory.annotation;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.aop.TargetSource;
+import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.PropertyValues;
-import org.springframework.beans.factory.BeanClassLoaderAware;
-import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.*;
 import org.springframework.beans.factory.annotation.InjectionMetadata;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.config.DependencyDescriptor;
 import org.springframework.beans.factory.config.InstantiationAwareBeanPostProcessorAdapter;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.EnvironmentAware;
@@ -48,10 +48,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -461,6 +458,67 @@ public abstract class AbstractAnnotationBeanPostProcessor extends
 
         @Override
         protected void inject(Object bean, String beanName, PropertyValues pvs) throws Throwable {
+            //参考@Autowired 针对@Lazy实现
+            // 延迟加载 org.springframework.context.annotation.ContextAnnotationAutowireCandidateResolver.buildLazyResolutionProxy
+            /**
+             *   //如果存在lazy注解
+             *                 DependencyDescriptor descriptor = new DependencyDescriptor();
+             *                 // new DependencyDescriptor(field, this.required);
+             *
+             *                 BeanFactory beanFactory = getBeanFactory();
+             *                 Assert.state(beanFactory instanceof DefaultListableBeanFactory,
+             *                     "BeanFactory needs to be a DefaultListableBeanFactory");
+             *                 final DefaultListableBeanFactory dlbf = (DefaultListableBeanFactory) beanFactory;
+             *
+             *                 TargetSource ts = new TargetSource() {
+             *                     @Override
+             *                     public Class<?> getTargetClass() {
+             *                         return descriptor.getDependencyType();
+             *                     }
+             *                     @Override
+             *                     public boolean isStatic() {
+             *                         return false;
+             *                     }
+             *                     @Override
+             *                     public Object getTarget() {
+             *                         Set<String> autowiredBeanNames = (beanName != null ? new LinkedHashSet<>(1) : null);
+             *                         Object target = dlbf.doResolveDependency(descriptor, beanName, autowiredBeanNames, null);
+             *                         if (target == null) {
+             *                             Class<?> type = getTargetClass();
+             *                             if (Map.class == type) {
+             *                                 return Collections.emptyMap();
+             *                             }
+             *                             else if (List.class == type) {
+             *                                 return Collections.emptyList();
+             *                             }
+             *                             else if (Set.class == type || Collection.class == type) {
+             *                                 return Collections.emptySet();
+             *                             }
+             *                             throw new NoSuchBeanDefinitionException(descriptor.getResolvableType(),
+             *                                 "Optional dependency not present for lazy injection point");
+             *                         }
+             *                         if (autowiredBeanNames != null) {
+             *                             for (String autowiredBeanName : autowiredBeanNames) {
+             *                                 if (dlbf.containsBean(autowiredBeanName)) {
+             *                                     dlbf.registerDependentBean(autowiredBeanName, beanName);
+             *                                 }
+             *                             }
+             *                         }
+             *                         return target;
+             *                     }
+             *                     @Override
+             *                     public void releaseTarget(Object target) {
+             *                     }
+             *                 };
+             *
+             *                 ProxyFactory pf = new ProxyFactory();
+             *                 pf.setTargetSource(ts);
+             *                 Class<?> dependencyType = descriptor.getDependencyType();
+             *                 if (dependencyType.isInterface()) {
+             *                     pf.addInterface(dependencyType);
+             *                 }
+             *                  pf.getProxy(dlbf.getBeanClassLoader());
+             */
 
             Object injectedObject = getInjectedObject(attributes, bean, beanName, getInjectedType(), this);
 
@@ -474,6 +532,7 @@ public abstract class AbstractAnnotationBeanPostProcessor extends
                 method.invoke(bean, injectedObject);
             }
         }
+
 
         public Class<?> getInjectedType() throws ClassNotFoundException {
             if (injectedType == null) {

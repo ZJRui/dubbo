@@ -315,8 +315,42 @@ public class ReferenceAnnotationBeanPostProcessor extends AbstractAnnotationBean
     @Override
     public PropertyValues postProcessPropertyValues(
             PropertyValues pvs, PropertyDescriptor[] pds, Object bean, String beanName) throws BeansException {
+        /***
+         *
+         *
+         * build:76, AbstractAnnotationConfigBeanBuilder (com.alibaba.dubbo.config.spring.beans.factory.annotation)
+         * buildReferenceBean:385, ReferenceAnnotationBeanPostProcessor (com.alibaba.dubbo.config.spring.beans.factory.annotation)
+         * access$100:65, ReferenceAnnotationBeanPostProcessor (com.alibaba.dubbo.config.spring.beans.factory.annotation)
+         * inject:363, ReferenceAnnotationBeanPostProcessor$ReferenceFieldElement (com.alibaba.dubbo.config.spring.beans.factory.annotation)
+         * inject:90, InjectionMetadata (org.springframework.beans.factory.annotation)
+         * ------------------- 处理Service 中使用@Reference 注解标记的属性
+         * postProcessPropertyValues:92, ReferenceAnnotationBeanPostProcessor (com.alibaba.dubbo.config.spring.beans.factory.annotation)
+         * populateBean:1336, AbstractAutowireCapableBeanFactory (org.springframework.beans.factory.support)
+         * doCreateBean:572, AbstractAutowireCapableBeanFactory (org.springframework.beans.factory.support)
+         * createBean:495, AbstractAutowireCapableBeanFactory (org.springframework.beans.factory.support)
+         * lambda$doGetBean$0:317, AbstractBeanFactory (org.springframework.beans.factory.support)
+         * getObject:-1, 2054071421 (org.springframework.beans.factory.support.AbstractBeanFactory$$Lambda$229)
+         * getSingleton:222, DefaultSingletonBeanRegistry (org.springframework.beans.factory.support)
+         * doGetBean:315, AbstractBeanFactory (org.springframework.beans.factory.support)
+         * getBean:199, AbstractBeanFactory (org.springframework.beans.factory.support)
+         * preInstantiateSingletons:759, DefaultListableBeanFactory (org.springframework.beans.factory.support)
+         * finishBeanFactoryInitialization:867, AbstractApplicationContext (org.springframework.context.support)
+         * __refresh:548, AbstractApplicationContext (org.springframework.context.support)
+         * jrLockAndRefresh:41002, AbstractApplicationContext (org.springframework.context.support)
+         * refresh:42008, AbstractApplicationContext (org.springframework.context.support)
+         * refresh:142, ServletWebServerApplicationContext (org.springframework.boot.web.servlet.context)
+         * refresh:754, SpringApplication (org.springframework.boot)
+         * refreshContext:386, SpringApplication (org.springframework.boot)
+         * run:307, SpringApplication (org.springframework.boot)
+         * run:1242, SpringApplication (org.springframework.boot)
+         * run:1230, SpringApplication (org.springframework.boot)
+         * main:48, YuerChatroomWebApplication (com.yupaopao.hug.chatroom.web)
+         *
+         *
+         */
 
         try {
+            //首先从 bean的这个属性上 查找 注解
             AnnotatedInjectionMetadata metadata = findInjectionMetadata(beanName, bean.getClass(), pvs);
             prepareInjection(metadata);
             metadata.inject(bean, beanName, pvs);
